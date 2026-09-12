@@ -49,8 +49,8 @@ Extensions_table_V11.sql
 *.pdf
 
 # Extension/theme packages (install separately)
-Extensions/
-Themes V10.9/
+/Extensions/
+/Themes V10.9/
 *.zip
 
 # Installation fix (not needed for v11.10)
