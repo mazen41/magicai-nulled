@@ -12,6 +12,7 @@ use Barryvdh\DomPDF\ServiceProvider;
 use Elseyyid\LaravelJsonLocationsManager\Providers\LaravelJsonLocationsManagerServiceProvider;
 use Igaster\LaravelTheme\Facades\Theme;
 use Igaster\LaravelTheme\themeServiceProvider;
+use RachidLaasri\LaravelInstaller\Providers\LaravelInstallerServiceProvider;
 use Illuminate\Auth\AuthServiceProvider;
 use Illuminate\Auth\Passwords\PasswordResetServiceProvider;
 use Illuminate\Broadcasting\BroadcastServiceProvider;
@@ -232,6 +233,7 @@ return [
         /*
          * Package Service Providers...
          */
+        RachidLaasri\LaravelInstaller\Providers\LaravelInstallerServiceProvider::class,
 
         /*
          * Application Service Providers...
