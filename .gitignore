@@ -1,0 +1,62 @@
+# Laravel
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/public/storage/*
+/public/uploads/*
+/storage/*.key
+/vendor
+.env
+.env.backup
+.env.production
+.phpunit.result.cache
+Homestead.json
+Homestead.lock
+npm-debug.log
+yarn-error.log
+
+# Laravel specific
+/bootstrap/cache/*.php
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+/storage/app/*
+/public/storage/*
+/public/themes/*
+/public/uploads/*
+
+# IDE
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# License bypass files
+License-ByBass-By-Ekr.sql
+Extensions_table_V11.sql
+*.sql.bak
+
+# Documentation PDFs
+*.pdf
+
+# Extension/theme packages (install separately)
+Extensions/
+Themes V10.9/
+*.zip
+
+# Installation fix (not needed for v11.10)
+magicai-install-settings-fix/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
