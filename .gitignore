@@ -1,6 +1,6 @@
 # Laravel
 /node_modules
-/public/build
+!/public/build
 /public/hot
 /public/storage
 /public/storage/*
@@ -24,7 +24,7 @@ yarn-error.log
 /storage/logs/*
 /storage/app/*
 /public/storage/*
-/public/themes/*
+!/public/themes/default/assets
 /public/uploads/*
 
 # IDE

@@ -66,7 +66,7 @@
     <script>
         window.isDemo = "{{ $app_is_demo }}";
         window.liquid = {
-            assetsPath: '{{ url(custom_theme_url('assets')) }}'
+            assetsPath: '{{ asset(custom_theme_url('assets')) }}'
         };
 
         // Suppress Alpine.js SecurityError when it walks cross-origin iframes
