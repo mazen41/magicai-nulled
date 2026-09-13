@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Dashboard;
 
 use App\Http\Controllers\Controller;
-use Datlechin\GoogleTranslate\Facades\GoogleTranslate;
 use Elseyyid\LaravelJsonLocationsManager\Models\Strings;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class TranslateController extends Controller
@@ -71,15 +71,37 @@ class TranslateController extends Controller
                 }
 
                 try {
-                    // Translate the string using Google Translate API
-                    $result = GoogleTranslate::withSource('en')
-                        ->withTarget($lang)
-                        ->translate($enDataToTranslate[$key]);
+                    // Translate using Groq API
+                    $groqKey = DB::table('settings')->where('id', 1)->value('openai_api_secret');
+                    // Allow override with Groq key stored separately, or use hardcoded fallback
+                    $groqApiKey = config('services.groq.key', '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');
+                    $payload = json_encode([
+                        'model' => 'openai/gpt-oss-20b',
+                        'messages' => [
+                            ['role' => 'system', 'content' => 'You are a translator. Translate the given text to the target language. Return ONLY the translated text, nothing else. Keep HTML tags, variables like :name %s {{var}}, and brand names unchanged.'],
+                            ['role' => 'user', 'content' => "Translate to language code '$lang': " . $enDataToTranslate[$key]],
+                        ],
+                        'max_tokens' => 300,
+                    ]);
+                    $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                        'Content-Type: application/json',
+                        'Authorization: Bearer ' . $groqApiKey,
+                    ]);
+                    $response = curl_exec($ch);
+                    curl_close($ch);
+                    $data = json_decode($response, true);
+                    $translatedText = $data['choices'][0]['message']['content'] ?? null;
+                    if (empty($translatedText)) {
+                        continue;
+                    }
+                    $translatedText = trim($translatedText);
                 } catch (Throwable $th) {
                     continue;
                 }
-
-                $translatedText = $result->getTranslatedText();
 
                 // Update the target language JSON file based on the translation
                 $targetDataToTranslate[$key] = $translatedText;
