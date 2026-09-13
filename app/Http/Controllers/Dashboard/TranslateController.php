@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Dashboard;
 
 use App\Http\Controllers\Controller;
 use Elseyyid\LaravelJsonLocationsManager\Models\Strings;
-use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class TranslateController extends Controller
@@ -72,9 +71,7 @@ class TranslateController extends Controller
 
                 try {
                     // Translate using Groq API
-                    $groqKey = DB::table('settings')->where('id', 1)->value('openai_api_secret');
-                    // Allow override with Groq key stored separately, or use hardcoded fallback
-                    $groqApiKey = config('services.groq.key', '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');
+                    $groqApiKey = env('GROQ_API_KEY');
                     $payload = json_encode([
                         'model' => 'openai/gpt-oss-20b',
                         'messages' => [
