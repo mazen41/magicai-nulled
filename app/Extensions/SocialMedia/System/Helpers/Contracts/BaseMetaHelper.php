@@ -27,8 +27,12 @@ abstract class BaseMetaHelper
             $endpoint = substr($endpoint, 1);
         }
 
-        $v = $this->config['api_version'] ?? '';
-        $versionedUrlWithEndpoint = $apiUrl . '/' . ($v ? ($v . '/') : '') . $endpoint;
+        if (str_starts_with($endpoint, 'oauth/')) {
+            $versionedUrlWithEndpoint = $apiUrl . '/' . $endpoint;
+        } else {
+            $v = $this->config['api_version'] ?? '';
+            $versionedUrlWithEndpoint = $apiUrl . '/' . ($v ? ($v . '/') : '') . $endpoint;
+        }
 
         if (count($params)) {
             $versionedUrlWithEndpoint .= '?' . http_build_query($params);
