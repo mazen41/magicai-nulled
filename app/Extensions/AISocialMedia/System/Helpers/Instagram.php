@@ -19,14 +19,14 @@ class Instagram
     {
         $instagramConfig = config('ai-social-media.instagram');
 
-        $instagramConfig['app_id'] = setting('instagram_app_id');
+        $instagramConfig['app_id']    = setting('instagram_app_id');
         $instagramConfig['app_secret'] = setting('instagram_app_secret');
 
         $this->config = $config ?? $instagramConfig;
         $this->config['redirect_uri'] = secure_url(config('ai-social-media.instagram.redirect_uri'));
     }
 
-    private function apiUrl(string $endpoint, array $params = [], bool $isBaseUrl = false)
+    private function apiUrl(string $endpoint, array $params = [], bool $isBaseUrl = false): string
     {
         $apiUrl = $isBaseUrl ? $this->config['base_url'] : $this->config['api_url'];
 
@@ -34,7 +34,7 @@ class Instagram
             $endpoint = substr($endpoint, 1);
         }
 
-        $v = $this->config['api_version'];
+        $v = $this->config['api_version'] ?? '';
         $versionedUrlWithEndpoint = $apiUrl . '/' . ($v ? ($v . '/') : '') . $endpoint;
 
         if (count($params)) {
@@ -51,7 +51,7 @@ class Instagram
             ->retry(1, 3000);
     }
 
-    public function setToken(string $bearerToken)
+    public function setToken(string $bearerToken): static
     {
         $this->accessToken = $bearerToken;
 
@@ -61,10 +61,13 @@ class Instagram
     public static function authRedirect(array $scopes = []): Application|Redirector|RedirectResponse|\Illuminate\Contracts\Foundation\Application
     {
         $instagram = new self;
+
         if ($scopes) {
             $instagram->config['scopes'] = $scopes;
         }
-        $authUri = $instagram->apiUrl('dialog/oauth', [
+
+        // Uses base_url = https://api.instagram.com → oauth/authorize
+        $authUri = $instagram->apiUrl('oauth/authorize', [
             'response_type' => 'code',
             'client_id'     => $instagram->config['app_id'],
             'redirect_uri'  => $instagram->config['redirect_uri'],
@@ -74,45 +77,69 @@ class Instagram
         return redirect($authUri);
     }
 
+    /**
+     * Exchange authorization code for a short-lived Instagram user access token.
+     * POST https://api.instagram.com/oauth/access_token
+     */
     public function getAccessToken(string $code): Response
     {
-        $redirect_uri = $this->apiUrl('/oauth/access_token', [
-            'code'          => $code,
+        return Http::asForm()->post($this->config['token_url'], [
             'client_id'     => $this->config['app_id'],
             'client_secret' => $this->config['app_secret'],
+            'grant_type'    => 'authorization_code',
             'redirect_uri'  => $this->config['redirect_uri'],
+            'code'          => $code,
         ]);
-
-        return Http::post($redirect_uri);
     }
 
+    /**
+     * Exchange a short-lived token for a long-lived Instagram access token (60 days).
+     * GET https://graph.instagram.com/access_token
+     */
+    public function getLongLivedToken(string $shortLivedToken): Response
+    {
+        return Http::get($this->config['longtoken_url'], [
+            'grant_type'   => 'ig_exchange_token',
+            'client_secret' => $this->config['app_secret'],
+            'access_token'  => $shortLivedToken,
+        ]);
+    }
+
+    /**
+     * Refresh an existing long-lived token.
+     * GET https://graph.instagram.com/refresh_access_token
+     */
     public function refreshAccessToken(): Response
     {
-        $apiUrl = $this->apiUrl('/oauth/access_token', [
-            'client_id'         => $this->config['app_id'],
-            'client_secret'     => $this->config['app_secret'],
-            'grant_type'        => 'fb_exchange_token',
-            'fb_exchange_token' => $this->accessToken,
-        ]);
+        $refreshUrl = $this->config['api_url'] . '/refresh_access_token';
 
-        return Http::post($apiUrl);
-    }
-
-    public function getAccountInfo(?array $fields = null): Response
-    {
-        $redirect_uri = $this->apiUrl('/me/accounts', [
+        return Http::get($refreshUrl, [
+            'grant_type'   => 'ig_refresh_token',
             'access_token' => $this->accessToken,
-            'fields'       => collect($fields)->join(','),
         ]);
-
-        return Http::get($redirect_uri);
     }
 
+    /**
+     * Get authenticated Instagram user's account directly.
+     * GET https://graph.instagram.com/v21.0/me
+     * Replaces the old /me/accounts + connected_instagram_account flow.
+     */
+    public function getMe(?array $fields = null): Response
+    {
+        $defaultFields = ['id', 'name', 'username', 'profile_picture_url', 'followers_count', 'account_type'];
+
+        return Http::withToken($this->accessToken)
+            ->get($this->apiUrl('me', [
+                'fields' => collect($fields ?? $defaultFields)->join(','),
+            ]));
+    }
+
+    /**
+     * Get info for a specific Instagram account by ID.
+     */
     public function getInstagramInfo(string $igId, ?array $fields = null): Response
     {
-        $redirect_uri = $this->apiUrl('/' . $igId);
-
-        return Http::withToken($this->accessToken)->get($redirect_uri, [
+        return Http::withToken($this->accessToken)->get($this->apiUrl($igId), [
             'fields' => collect($fields)->join(','),
         ]);
     }
@@ -137,20 +164,19 @@ class Instagram
     public function publishCarouselPost(string $igId, array $files, string $mediaType = 'image', string $caption = ''): Response
     {
         $containerIds = [];
+        $apiUrl = $this->apiUrl($igId . '/media');
+
         foreach ($files as $fileUrl) {
-            $containerData = [
-                'is_carousel_item' => true,
-            ];
+            $containerData = ['is_carousel_item' => true];
 
             if ($mediaType == 'image') {
                 $containerData['media_type'] = 'IMAGE';
-                $containerData['image_url'] = $fileUrl;
+                $containerData['image_url']  = $fileUrl;
             } elseif ($mediaType == 'video') {
                 $containerData['media_type'] = 'VIDEO';
-                $containerData['video_url'] = $fileUrl;
+                $containerData['video_url']  = $fileUrl;
             }
 
-            $apiUrl = $this->apiUrl($igId . '/media');
             $containerRes = Http::withToken($this->accessToken)
                 ->asForm()
                 ->acceptJson()
@@ -165,12 +191,13 @@ class Instagram
             ->post($apiUrl, [
                 'media_type' => 'CAROUSEL',
                 'children'   => $containerIds,
+                'caption'    => $caption,
             ]);
 
         return $this->publishContainer($igId, $publishCarouselContainerRes->json('id'));
     }
 
-    protected function publishContainer(string $igId, string $creation_id)
+    protected function publishContainer(string $igId, string $creation_id): Response
     {
         $apiUrl = $this->apiUrl($igId . '/media_publish');
 
@@ -197,14 +224,12 @@ class Instagram
 
             if ($isFinished) {
                 Log::info("Upload finished with status: $status");
-
                 break;
             }
 
             $isError = in_array(strtolower($status), ['error', 'failed']);
             if ($isError) {
                 Log::info("Upload error with status: $status");
-
                 break;
             }
 
@@ -219,16 +244,6 @@ class Instagram
         ];
     }
 
-    private function getMediaStatus(string $mediaId): Response
-    {
-        $apiUrl = $this->apiUrl($mediaId, [
-            'fields' => 'status',
-        ]);
-
-        return Http::withToken($this->accessToken)->get($apiUrl)->throw();
-    }
-
-    // analytics
     public function getPostAnalytics(string $postId, array $fields = []): Response
     {
         return Http::withToken($this->accessToken)

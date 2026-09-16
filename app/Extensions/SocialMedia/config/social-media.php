@@ -41,24 +41,24 @@ return [
     ],
 
     'instagram' => [
-        'app_id'       => 'INSTAGRAM_APP_ID', // INSTAGRAM_APP_ID
-        'app_secret'   => 'INSTAGRAM_APP_SECRET', // INSTAGRAM_APP_SECRET
-        'base_url'     => 'https://www.facebook.com',
-        'api_url'      => 'https://graph.facebook.com',
-        'redirect_uri' => '/social-media/oauth/callback/instagram',
-        'api_version'  => 'v18.0',
-        'scopes'       => [
-            'pages_manage_posts',
-            'pages_show_list',
-            'pages_read_user_content',
-            'pages_read_engagement',
-            'read_insights',
-            'ads_management',
-            'business_management',
-            'instagram_basic',
-            'instagram_content_publish',
-            'instagram_manage_comments',
-            'instagram_manage_messages',
+        'app_id'        => 'INSTAGRAM_APP_ID',    // INSTAGRAM_APP_ID
+        'app_secret'    => 'INSTAGRAM_APP_SECRET', // INSTAGRAM_APP_SECRET
+        // Instagram Login OAuth dialog base (authRedirect uses this)
+        'base_url'      => 'https://api.instagram.com',
+        // Instagram Graph API for all account/post/media calls
+        'api_url'       => 'https://graph.instagram.com',
+        'redirect_uri'  => '/social-media/oauth/callback/instagram',
+        'api_version'   => 'v21.0',
+        // Short-lived token exchange (POST api.instagram.com/oauth/access_token)
+        'token_url'     => 'https://api.instagram.com/oauth/access_token',
+        // Long-lived token exchange (GET graph.instagram.com/access_token)
+        'longtoken_url' => 'https://graph.instagram.com/access_token',
+        // Instagram Business Login scopes
+        'scopes'        => [
+            'instagram_business_basic',
+            'instagram_business_content_publish',
+            'instagram_business_manage_comments',
+            'instagram_business_manage_messages',
         ],
         'requirements' => [
             'text' => [
@@ -126,6 +126,7 @@ return [
             ],
         ],
     ],
+
     'tiktok' => [
         'app_id'       => env('TIKTOK_APP_ID'),
         'app_key'      => env('TIKTOK_APP_KEY'),

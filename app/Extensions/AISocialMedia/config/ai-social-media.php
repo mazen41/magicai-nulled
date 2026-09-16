@@ -2,23 +2,24 @@
 
 return [
     'instagram' => [
-        'app_id'       => '',
-        'app_secret'   => '',
-        'base_url'     => 'https://www.facebook.com',
-        'api_url'      => 'https://graph.facebook.com',
-        'redirect_uri' => '/oauth/callback/instagram',
-        'api_version'  => 'v18.0',
-        'scopes'       => [
-            'pages_manage_posts',
-            'pages_show_list',
-            'pages_read_user_content',
-            'pages_read_engagement',
-            'read_insights',
-
-            'ads_management',
-            'business_management',
-            'instagram_basic',
-            'instagram_content_publish',
+        'app_id'        => '',
+        'app_secret'    => '',
+        // Instagram Login OAuth dialog base
+        'base_url'      => 'https://api.instagram.com',
+        // Instagram Graph API for all account/post/media calls
+        'api_url'       => 'https://graph.instagram.com',
+        'redirect_uri'  => '/oauth/callback/instagram',
+        'api_version'   => 'v21.0',
+        // Short-lived token exchange
+        'token_url'     => 'https://api.instagram.com/oauth/access_token',
+        // Long-lived token exchange
+        'longtoken_url' => 'https://graph.instagram.com/access_token',
+        // Instagram Business Login scopes
+        'scopes'        => [
+            'instagram_business_basic',
+            'instagram_business_content_publish',
+            'instagram_business_manage_comments',
+            'instagram_business_manage_messages',
         ],
         'requirements' => [
             'text' => [

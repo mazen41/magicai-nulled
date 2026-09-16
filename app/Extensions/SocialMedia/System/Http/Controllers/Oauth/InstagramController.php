@@ -45,16 +45,10 @@ class InstagramController extends Controller
                 });
             }
 
-            return Instagram::authRedirect([
-                'instagram_basic',
-                'instagram_content_publish',
-                'instagram_manage_comments',
-                'instagram_manage_messages',
-                'pages_read_engagement',
-                'pages_show_list',
-                'business_management',
-                'instagram_manage_insights',
-            ]);
+            // Scopes come from config('social-media.instagram.scopes'):
+            // instagram_business_basic, instagram_business_content_publish,
+            // instagram_business_manage_comments, instagram_business_manage_messages
+            return Instagram::authRedirect();
         }
 
         return back()->with([
@@ -78,14 +72,43 @@ class InstagramController extends Controller
         $instagram = new Instagram;
 
         try {
+            // Step 1: Exchange code for short-lived token
+            // POST https://api.instagram.com/oauth/access_token
+            $shortTokenResponse = $instagram->getAccessToken($code)->throw();
+            $shortLivedToken = $shortTokenResponse->json('access_token');
 
-            $token = $instagram->getAccessToken($code)->throw()->json('access_token');
-            $instagram->setToken($token);
+            if (! $shortLivedToken) {
+                throw new Exception('No access_token in short-lived token response.');
+            }
 
-            $page = $instagram->getAccountInfo(['connected_instagram_account,name,access_token'])
-                ->throw()
-                ->json('data.0');
+            // Step 2: Exchange short-lived token for long-lived token (60-day)
+            // GET https://graph.instagram.com/access_token
+            $longTokenResponse = $instagram->getLongLivedToken($shortLivedToken)->throw();
+            $longLivedToken = $longTokenResponse->json('access_token');
+            $expiresIn = $longTokenResponse->json('expires_in', 5184000); // default 60 days in seconds
+
+            if (! $longLivedToken) {
+                throw new Exception('No access_token in long-lived token response.');
+            }
+
+            $instagram->setToken($longLivedToken);
+
+            // Step 3: Get Instagram account directly via /me
+            // GET https://graph.instagram.com/v21.0/me
+            // No Facebook Pages, no connected_instagram_account lookup needed.
+            $igAccount = $instagram->getMe([
+                'id',
+                'name',
+                'username',
+                'profile_picture_url',
+                'followers_count',
+            ])->throw()->json();
+
         } catch (Exception $exception) {
+            Log::error('Instagram OAuth callback failed', [
+                'message' => $exception->getMessage(),
+            ]);
+
             return redirect()->route($this->getBackCacheRoute())
                 ->with([
                     'type'    => 'error',
@@ -93,24 +116,30 @@ class InstagramController extends Controller
                 ]);
         }
 
-        if (! isset($page['connected_instagram_account'])) {
+        if (! isset($igAccount['id'])) {
             return redirect()->route($this->getBackCacheRoute())
                 ->with([
                     'type'    => 'error',
-                    'message' => trans('Something went wrong, please try again.'),
+                    'message' => trans('Could not retrieve Instagram account. Please try again.'),
                 ]);
         }
 
-        $igAccount = $instagram->getInstagramInfo($page['connected_instagram_account']['id'], ['id,name,username,profile_picture_url,followers_count'])
-            ->throw()
-            ->json();
-
         $followersCount = (int) ($igAccount['followers_count'] ?? 0);
+        $expiresAt = now()->addSeconds($expiresIn);
+
+        $credentials = [
+            'type'         => 'user',
+            'id'           => $igAccount['id'],
+            'platform_id'  => $igAccount['id'],
+            'name'         => $igAccount['name'] ?? $igAccount['username'] ?? '',
+            'username'     => $igAccount['username'] ?? '',
+            'picture'      => $igAccount['profile_picture_url'] ?? '',
+            'access_token' => $longLivedToken,
+        ];
 
         $platformId = Cache::get($this->cacheKey());
 
         if ($platformId && is_numeric($platformId)) {
-
             $platform = SocialMediaPlatform::query()
                 ->where('id', $platformId)
                 ->where('user_id', Auth::id())
@@ -119,17 +148,9 @@ class InstagramController extends Controller
 
             if ($platform) {
                 $platform->update([
-                    'credentials' => [
-                        'type'                    => 'user',
-                        'id'                      => $igAccount['id'],
-                        'platform_id'             => $igAccount['id'],
-                        'name'                    => $igAccount['name'],
-                        'username'                => $igAccount['username'],
-                        'picture'                 => $igAccount['profile_picture_url'],
-                        'access_token'            => $igAccount['access_token'] ?? $token,
-                    ],
+                    'credentials'     => $credentials,
                     'connected_at'    => now(),
-                    'expires_at'      => now()->addMonths(2),
+                    'expires_at'      => $expiresAt,
                     'followers_count' => $followersCount,
                 ]);
             }
@@ -137,19 +158,11 @@ class InstagramController extends Controller
             Cache::forget($this->cacheKey());
         } else {
             SocialMediaPlatform::query()->create([
-                'user_id'     => Auth::id(),
-                'platform'    => PlatformEnum::instagram->value,
-                'credentials' => [
-                    'type'                    => 'user',
-                    'id'                      => $igAccount['id'],
-                    'platform_id'             => $igAccount['id'],
-                    'name'                    => $igAccount['name'],
-                    'username'                => $igAccount['username'],
-                    'picture'                 => $igAccount['profile_picture_url'],
-                    'access_token'            => $igAccount['access_token'] ?? $token,
-                ],
+                'user_id'         => Auth::id(),
+                'platform'        => PlatformEnum::instagram->value,
+                'credentials'     => $credentials,
                 'connected_at'    => now(),
-                'expires_at'      => now()->addMonths(2),
+                'expires_at'      => $expiresAt,
                 'followers_count' => $followersCount,
             ]);
         }

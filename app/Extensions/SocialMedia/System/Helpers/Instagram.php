@@ -25,7 +25,6 @@ class Instagram extends BaseMetaHelper
 
         $this->config = $config ?? $instagramConfig;
         $this->config['redirect_uri'] = secure_url(config('social-media.instagram.redirect_uri'));
-
     }
 
     private function apiClient(): PendingRequest
@@ -43,7 +42,8 @@ class Instagram extends BaseMetaHelper
             $instagram->config['scopes'] = $scopes;
         }
 
-        $authUri = $instagram->apiUrl('dialog/oauth', [
+        // Uses base_url = https://api.instagram.com → /oauth/authorize
+        $authUri = $instagram->apiUrl('oauth/authorize', [
             'response_type' => 'code',
             'client_id'     => $instagram->config['app_id'],
             'redirect_uri'  => $instagram->config['redirect_uri'],
@@ -53,33 +53,73 @@ class Instagram extends BaseMetaHelper
         return redirect($authUri);
     }
 
+    /**
+     * Exchange authorization code for a short-lived Instagram user access token.
+     * POSTs to https://api.instagram.com/oauth/access_token
+     * Returns: { access_token, token_type, expires_in }
+     */
+    public function getAccessToken(string $code): Response
+    {
+        return Http::asForm()->post($this->config['token_url'], [
+            'client_id'     => $this->config['app_id'],
+            'client_secret' => $this->config['app_secret'],
+            'grant_type'    => 'authorization_code',
+            'redirect_uri'  => $this->config['redirect_uri'],
+            'code'          => $code,
+        ]);
+    }
+
+    /**
+     * Exchange a short-lived token for a long-lived Instagram access token.
+     * GETs https://graph.instagram.com/access_token
+     * Returns: { access_token, token_type, expires_in }
+     * Long-lived tokens are valid for 60 days and are refreshable.
+     */
+    public function getLongLivedToken(string $shortLivedToken): Response
+    {
+        return Http::get($this->config['longtoken_url'], [
+            'grant_type'        => 'ig_exchange_token',
+            'client_secret'     => $this->config['app_secret'],
+            'access_token'      => $shortLivedToken,
+        ]);
+    }
+
+    /**
+     * Refresh an existing long-lived token before it expires.
+     * GETs https://graph.instagram.com/refresh_access_token
+     */
     public function refreshAccessToken(): Response
     {
-        $apiUrl = $this->apiUrl('/oauth/access_token', [
-            'client_id'         => $this->config['app_id'],
-            'client_secret'     => $this->config['app_secret'],
-            'grant_type'        => 'fb_exchange_token',
-            'fb_exchange_token' => $this->accessToken,
-        ]);
+        $refreshUrl = $this->config['api_url'] . '/refresh_access_token';
 
-        return Http::post($apiUrl);
-    }
-
-    public function getAccountInfo(?array $fields = null): Response
-    {
-        $redirect_uri = $this->apiUrl('/me/accounts', [
+        return Http::get($refreshUrl, [
+            'grant_type'   => 'ig_refresh_token',
             'access_token' => $this->accessToken,
-            'fields'       => collect($fields)->join(','),
         ]);
-
-        return Http::get($redirect_uri);
     }
 
+    /**
+     * Get the authenticated Instagram user's own account info directly.
+     * GETs https://graph.instagram.com/v21.0/me
+     * No Facebook Pages or connected_instagram_account lookup needed.
+     */
+    public function getMe(?array $fields = null): Response
+    {
+        $defaultFields = ['id', 'name', 'username', 'profile_picture_url', 'followers_count', 'account_type'];
+
+        return Http::withToken($this->accessToken)
+            ->get($this->apiUrl('me', [
+                'fields' => collect($fields ?? $defaultFields)->join(','),
+            ]));
+    }
+
+    /**
+     * Get info for a specific Instagram account by ID.
+     * Used by follower sync and post-connection profile refresh.
+     */
     public function getInstagramInfo(string $igId, ?array $fields = null): Response
     {
-        $redirect_uri = $this->apiUrl('/' . $igId);
-
-        return Http::withToken($this->accessToken)->get($redirect_uri, [
+        return Http::withToken($this->accessToken)->get($this->apiUrl($igId), [
             'fields' => collect($fields)->join(','),
         ]);
     }
@@ -209,15 +249,6 @@ class Instagram extends BaseMetaHelper
         ];
     }
 
-    private function getMediaStatus(string $mediaId): Response
-    {
-        $apiUrl = $this->apiUrl($mediaId, [
-            'fields' => 'status',
-        ]);
-
-        return Http::withToken($this->accessToken)->get($apiUrl)->throw();
-    }
-
     public function getMedia(string $igId, int $limit = 50, ?array $fields = null): Response
     {
         $defaultFields = ['id', 'caption', 'media_type', 'media_url', 'thumbnail_url', 'timestamp', 'like_count', 'comments_count'];
@@ -229,7 +260,6 @@ class Instagram extends BaseMetaHelper
             ]));
     }
 
-    // analytics
     public function getPostAnalytics(string $postId, array $fields = []): Response
     {
         return Http::withToken($this->accessToken)
