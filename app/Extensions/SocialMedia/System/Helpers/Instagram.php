@@ -71,13 +71,13 @@ class Instagram extends BaseMetaHelper
 
     /**
      * Exchange a short-lived token for a long-lived Instagram access token.
-     * GETs https://graph.instagram.com/access_token
+     * POSTs to https://graph.instagram.com/access_token
      * Returns: { access_token, token_type, expires_in }
      * Long-lived tokens are valid for 60 days and are refreshable.
      */
     public function getLongLivedToken(string $shortLivedToken): Response
     {
-        return Http::get($this->config['longtoken_url'], [
+        return Http::asForm()->post($this->config['longtoken_url'], [
             'grant_type'        => 'ig_exchange_token',
             'client_secret'     => $this->config['app_secret'],
             'access_token'      => $shortLivedToken,
@@ -86,13 +86,13 @@ class Instagram extends BaseMetaHelper
 
     /**
      * Refresh an existing long-lived token before it expires.
-     * GETs https://graph.instagram.com/refresh_access_token
+     * POSTs to https://graph.instagram.com/refresh_access_token
      */
     public function refreshAccessToken(): Response
     {
         $refreshUrl = $this->config['api_url'] . '/refresh_access_token';
 
-        return Http::get($refreshUrl, [
+        return Http::asForm()->post($refreshUrl, [
             'grant_type'   => 'ig_refresh_token',
             'access_token' => $this->accessToken,
         ]);
