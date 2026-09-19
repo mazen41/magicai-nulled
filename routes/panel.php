@@ -61,6 +61,9 @@ use App\Http\Controllers\Finance\PaymentProcessController;
 use App\Http\Controllers\InstallationController;
 use App\Http\Controllers\Integration\IntegrationController;
 use App\Http\Controllers\Market\MarketPlaceController;
+use App\Http\Controllers\SallaOAuthController;
+use App\Http\Controllers\SallaStoreController;
+use App\Http\Controllers\SallaWebhookSubscriptionController;
 use App\Http\Controllers\OpenAi\GeneratorController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\Payment\PlanAndPricingController;
@@ -144,6 +147,42 @@ Route::middleware(['auth', 'updateUserActivity'])
                 });
 
                 Route::resource('integration', IntegrationController::class)->only(['index', 'edit', 'update']);
+
+                // Salla OAuth
+                Route::group([
+                    'as'         => 'salla.',
+                    'prefix'     => 'salla',
+                ], static function () {
+                    Route::controller(SallaOAuthController::class)->group(function () {
+                        Route::get('connect', 'redirect')->name('connect');
+                        Route::get('oauth/callback', 'callback')->name('callback');
+                    });
+
+                    Route::controller(SallaStoreController::class)->group(function () {
+                        Route::get('/', 'index')->name('index');
+                        Route::post('{id}/test', 'test')->name('test');
+                        Route::delete('{id}/disconnect', 'disconnect')->name('disconnect');
+                    });
+
+                    Route::controller(SallaOrderController::class)->group(function () {
+                        Route::get('{connectionId}/orders', 'index')->name('orders.index');
+                        Route::get('{connectionId}/orders/{orderId}', 'show')->name('orders.show');
+                        Route::post('{connectionId}/orders/{orderId}/refresh', 'refresh')->name('orders.refresh');
+                    });
+
+                    Route::controller(SallaWebhookEventController::class)->group(function () {
+                        Route::get('{connectionId}/events', 'index')->name('events.index');
+                        Route::get('{connectionId}/events/{eventId}', 'show')->name('events.show');
+                    });
+
+                    Route::controller(SallaWebhookSubscriptionController::class)->group(function () {
+                        Route::get('{connectionId}/webhooks', 'index')->name('webhooks.index');
+                        Route::post('{connectionId}/webhooks', 'subscribe')->name('webhooks.subscribe');
+                        Route::put('{connectionId}/webhooks/{subscriptionId}', 'update')->name('webhooks.update');
+                        Route::delete('{connectionId}/webhooks/{subscriptionId}', 'destroy')->name('webhooks.destroy');
+                        Route::post('{connectionId}/webhooks/sync', 'sync')->name('webhooks.sync');
+                    });
+                });
 
                 // brand voice
                 Route::get('brand', [BrandController::class, 'index'])->name('brand.index')->middleware(CheckTemplateTypeAndPlan::class);

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Finance\PaymentProcessController;
+use App\Http\Controllers\SallaWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('webhooks')
@@ -13,6 +14,8 @@ Route::prefix('webhooks')
 
         Route::any('stripe/{plan}/{user}/success/prepaid', [PaymentProcessController::class, 'prepaidStripeSuccess'])->name('stripe.success');
         Route::any('stripe/cancel/prepaid', [PaymentProcessController::class, 'stripeCancel'])->name('stripe.cancel');
+
+        Route::post('salla', [SallaWebhookController::class, 'handle'])->name('salla');
     });
 Route::prefix('webhook')
     ->name('webhook.')

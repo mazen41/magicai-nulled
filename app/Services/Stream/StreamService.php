@@ -23,12 +23,14 @@ use App\Helpers\Classes\ApiHelper;
 use App\Helpers\Classes\Helper;
 use App\Helpers\Classes\MarketplaceHelper;
 use App\Helpers\Classes\OpenAiParamHelper;
+use App\Models\Chatbot\Chatbot;
 use App\Models\Setting;
 use App\Models\SettingTwo;
 use App\Models\Usage;
 use App\Models\UserOpenai;
 use App\Models\UserOpenaiChat;
 use App\Models\UserOpenaiChatMessage;
+use App\Services\Salla\SallaOrderToolService;
 use App\Services\Assistant\AssistantService;
 use App\Services\Bedrock\BedrockRuntimeService;
 use Exception;
@@ -550,6 +552,34 @@ class StreamService
             }
         }
 
+        // Add Salla order status tool if chatbot has Salla connection
+        $chatbot = $this->getChatbotForCurrentChat();
+        if ($chatbot && $chatbot->salla_connection_id && class_exists(SallaOrderToolService::class)) {
+            $sallaToolService = new SallaOrderToolService();
+            $sallaTools = match ($ai_engine) {
+                EngineEnum::OPEN_AI->value   => $sallaToolService->getToolDefinitions($chatbot),
+                EngineEnum::ANTHROPIC->value => $sallaToolService->getAnthropicToolDefinitions($chatbot),
+                EngineEnum::GEMINI->value    => $sallaToolService->getGeminiToolDefinitions($chatbot),
+                default                      => [],
+            };
+
+            if (! empty($sallaTools)) {
+                if ($ai_engine === EngineEnum::GEMINI->value) {
+                    // Gemini wraps declarations in a single block; merge functionDeclarations together.
+                    if (! empty($skillTools)) {
+                        $skillTools[0]['functionDeclarations'] = array_merge(
+                            $skillTools[0]['functionDeclarations'] ?? [],
+                            $sallaTools
+                        );
+                    } else {
+                        $skillTools = [['functionDeclarations' => $sallaTools]];
+                    }
+                } else {
+                    $skillTools = array_merge($skillTools, $sallaTools);
+                }
+            }
+        }
+
         return match ($ai_engine) {
             EngineEnum::OPEN_AI->value   => $this->openaiChatStream($chat_bot, $history, $main_message, $chat_type, $contain_images, tools: ! empty($skillTools) ? $skillTools : []),
             EngineEnum::ANTHROPIC->value => $this->anthropicChatStream($chat_bot, $history, $main_message, $chat_type, $contain_images),
@@ -558,6 +588,32 @@ class StreamService
             EngineEnum::X_AI->value      => $this->xAiChatStream($chat_bot, $history, $main_message, $chat_type, $contain_images),
             default                      => throw new Exception('Invalid AI Engine'),
         };
+    }
+
+    /**
+     * Get the chatbot for the current chat session.
+     */
+    private function getChatbotForCurrentChat(): ?Chatbot
+    {
+        try {
+            $chatId = request()?->input('chat_id');
+            if (! $chatId) {
+                return null;
+            }
+
+            $chat = UserOpenaiChat::find($chatId);
+            if (! $chat || ! $chat->chatbot_id) {
+                return null;
+            }
+
+            return Chatbot::find($chat->chatbot_id);
+        } catch (Throwable $e) {
+            Log::error('[StreamService] Failed to get chatbot for current chat', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     private function openRouterChatStream($chat_bot, $history, $main_message, $contain_images, $openRouter)
@@ -1735,6 +1791,88 @@ class StreamService
                                     continue;
                                 }
 
+                                // Salla tool calls: execute the Salla tool, inject result, restream
+                                if ($functionName === 'salla_order_status' && class_exists(SallaOrderToolService::class)) {
+                                    $chatbot = $this->getChatbotForCurrentChat();
+                                    if ($chatbot) {
+                                        try {
+                                            $sallaToolService = new SallaOrderToolService();
+                                            $sallaResult = $sallaToolService->handleToolCall($chatbot, $functionName, ['function' => ['arguments' => $argumentsString]]);
+                                            $sallaResultJson = json_decode($sallaResult, true);
+
+                                            $history[] = [
+                                                'role'    => 'system',
+                                                'content' => '[Salla Order Status]\nThe user requested order status information. Use the data below to answer their question. Do not invent facts that are not in the data.\n\nResult:\n' . $sallaResult,
+                                            ];
+                                            $history = array_values(array_filter($history, function ($msg) {
+                                                return ! str_contains($msg['content'] ?? '', '{"title":"short descriptive title');
+                                            }));
+                                            $this->isFirstMessage = false;
+
+                                            $sallaFollowUpParts = [];
+                                            if ($baseInstructions !== '') {
+                                                $sallaFollowUpParts[] = $baseInstructions;
+                                            }
+                                            $sallaFollowUpParts[] = '[Salla Order Status]\n'
+                                                . "The user requested order status information. Use ONLY the JSON result below to answer their question — do not invent data, and do not say the data is unavailable. Summarize clearly. Do not call any tools.\n\n"
+                                                . "Result JSON:\n" . $sallaResult;
+                                            $sallaFollowUpInstructions = implode("\n\n---\n\n", $sallaFollowUpParts);
+
+                                            $sallaNonSystemInput = array_values(array_filter($history, fn ($msg) => ($msg['role'] ?? '') !== 'system'));
+
+                                            $sallaOptions = [
+                                                'model'        => $model,
+                                                'stream'       => true,
+                                                'instructions' => $sallaFollowUpInstructions,
+                                                'input'        => $sallaNonSystemInput,
+                                                'temperature'  => 1.0,
+                                            ];
+                                            if ($driver->enum()->isReasoningModel()) {
+                                                if (in_array($driver->enum(), [EntityEnum::GPT_5_PRO, EntityEnum::GPT_5_2_PRO])) {
+                                                    $effort = setting('openai_reasoning_models_effort', 'high');
+                                                    $sallaOptions['reasoning']['effort'] = in_array($effort, ['medium', 'high', 'xhigh']) ? $effort : 'high';
+                                                } else {
+                                                    $sallaOptions['reasoning']['effort'] = $this->resolveReasoningEffort($driver->enum());
+                                                }
+                                            }
+
+                                            $sallaStream = OpenAI::responses()->createStreamed($sallaOptions);
+
+                                            foreach ($sallaStream as $sallaResponse) {
+                                                if (! isset($sallaResponse->event)) {
+                                                    continue;
+                                                }
+                                                if (connection_aborted()) {
+                                                    break;
+                                                }
+                                                if (isset($sallaResponse->response->delta) && $sallaResponse->event === 'response.output_text.delta') {
+                                                    $text = $sallaResponse->response->delta;
+                                                    $messageFix = str_replace(["\r\n", "\r", "\n"], '<br/>', $text);
+                                                    $output .= $messageFix;
+                                                    $responsedText .= $text;
+                                                    $total_used_tokens += countWords($text);
+                                                    $this->emitStreamChunk($messageFix);
+                                                }
+                                            }
+
+                                            $hasTextOutput = true;
+
+                                            continue;
+                                        } catch (Throwable $e) {
+                                            Log::error('[SallaOrderTool] StreamService(OpenAI): tool call threw', [
+                                                'function' => $functionName,
+                                                'message'  => $e->getMessage(),
+                                            ]);
+                                            $history[] = [
+                                                'role'    => 'system',
+                                                'content' => '[Salla Order Status]\nUnable to retrieve order status due to an error. Please try again or contact support.',
+                                            ];
+                                            $hasTextOutput = true;
+                                            continue;
+                                        }
+                                    }
+                                }
+
                                 // Skill tool calls: inject instructions and stream a second response
                                 if (str_starts_with($functionName, 'use_skill_') && class_exists(SkillToolService::class)) {
                                     $skillInstructions = SkillToolService::handleSkillCall($functionName, $this->autoSkills);
@@ -2339,6 +2477,124 @@ class StreamService
                                 continue;
                             }
 
+                            // Salla tool calls: execute the Salla tool, inject result, restream
+                            if ($functionName === 'salla_order_status' && class_exists(SallaOrderToolService::class)) {
+                                $chatbot = $this->getChatbotForCurrentChat();
+                                if ($chatbot) {
+                                    try {
+                                        $sallaToolService = new SallaOrderToolService();
+                                        $sallaResult = $sallaToolService->handleAnthropicToolCall($chatbot, $functionName, json_decode($toolUseInput ?: '{}', true) ?: []);
+                                        $sallaResultJson = json_decode($sallaResult, true);
+
+                                        $followUpMessages[] = [
+                                            'role'    => 'assistant',
+                                            'content' => [
+                                                ['type' => 'tool_use', 'id' => $toolUseBlock->id, 'name' => $functionName, 'input' => json_decode($toolUseInput ?: '{}', true) ?: new stdClass],
+                                            ],
+                                        ];
+                                        $followUpMessages[] = [
+                                            'role'    => 'user',
+                                            'content' => [
+                                                ['type' => 'tool_result', 'tool_use_id' => $toolUseBlock->id, 'content' => $sallaResult],
+                                            ],
+                                        ];
+
+                                        $followUpData = $client->setStream(true)
+                                            ->setSystem($system)
+                                            ->setTools([])
+                                            ->setMessages($followUpMessages)
+                                            ->stream()
+                                            ->body();
+
+                                        foreach (explode("\n", $followUpData) as $followChunk) {
+                                            if (strlen($followChunk) < 6) {
+                                                continue;
+                                            }
+                                            if (! Str::contains($followChunk, 'data: ')) {
+                                                continue;
+                                            }
+                                            $followChunk = str_replace('data: {', '{', $followChunk);
+
+                                            try {
+                                                $followJson = json_decode($followChunk, false, 512, JSON_THROW_ON_ERROR);
+                                            } catch (JsonException) {
+                                                continue;
+                                            }
+                                            if (isset($followJson->delta->text)) {
+                                                $message = $followJson->delta->text;
+                                                $messageFix = str_replace(["\r\n", "\r", "\n"], '<br/>', $message);
+                                                $output .= $messageFix;
+                                                $responsedText .= $message;
+                                                $total_used_tokens += countWords($message);
+                                                $this->emitStreamChunk($messageFix);
+                                            }
+                                            if (connection_aborted()) {
+                                                break;
+                                            }
+                                        }
+
+                                        $toolUseBlock = null;
+
+                                        continue;
+                                    } catch (Throwable $e) {
+                                        Log::error('[SallaOrderTool] StreamService(Anthropic): tool call threw', [
+                                            'function' => $functionName,
+                                            'message'  => $e->getMessage(),
+                                        ]);
+                                        $followUpMessages[] = [
+                                            'role'    => 'assistant',
+                                            'content' => [
+                                                ['type' => 'tool_use', 'id' => $toolUseBlock->id, 'name' => $functionName, 'input' => json_decode($toolUseInput ?: '{}', true) ?: new stdClass],
+                                            ],
+                                        ];
+                                        $followUpMessages[] = [
+                                            'role'    => 'user',
+                                            'content' => [
+                                                ['type' => 'tool_result', 'tool_use_id' => $toolUseBlock->id, 'content' => 'Unable to retrieve order status due to an error. Please try again or contact support.'],
+                                            ],
+                                        ];
+
+                                        $followUpData = $client->setStream(true)
+                                            ->setSystem($system)
+                                            ->setTools([])
+                                            ->setMessages($followUpMessages)
+                                            ->stream()
+                                            ->body();
+
+                                        foreach (explode("\n", $followUpData) as $followChunk) {
+                                            if (strlen($followChunk) < 6) {
+                                                continue;
+                                            }
+                                            if (! Str::contains($followChunk, 'data: ')) {
+                                                continue;
+                                            }
+                                            $followChunk = str_replace('data: {', '{', $followChunk);
+
+                                            try {
+                                                $followJson = json_decode($followChunk, false, 512, JSON_THROW_ON_ERROR);
+                                            } catch (JsonException) {
+                                                continue;
+                                            }
+                                            if (isset($followJson->delta->text)) {
+                                                $message = $followJson->delta->text;
+                                                $messageFix = str_replace(["\r\n", "\r", "\n"], '<br/>', $message);
+                                                $output .= $messageFix;
+                                                $responsedText .= $message;
+                                                $total_used_tokens += countWords($message);
+                                                $this->emitStreamChunk($messageFix);
+                                            }
+                                            if (connection_aborted()) {
+                                                break;
+                                            }
+                                        }
+
+                                        $toolUseBlock = null;
+
+                                        continue;
+                                    }
+                                }
+                            }
+
                             if (str_starts_with($functionName, 'use_skill_') && class_exists(SkillToolService::class)) {
                                 $skillInstructions = SkillToolService::handleSkillCall($functionName, $this->autoSkills);
                                 $skillMeta = SkillToolService::getSkillMeta($functionName, $this->autoSkills);
@@ -2819,6 +3075,154 @@ class StreamService
                                 }
 
                                 continue;
+                            }
+
+                            // Salla tool calls: execute the Salla tool, inject result, restream
+                            if ($functionName === 'salla_order_status' && class_exists(SallaOrderToolService::class)) {
+                                $chatbot = $this->getChatbotForCurrentChat();
+                                if ($chatbot) {
+                                    try {
+                                        $sallaToolService = new SallaOrderToolService();
+                                        $sallaArgs = is_array($part['functionCall']['args'] ?? null) ? $part['functionCall']['args'] : [];
+                                        $sallaResult = $sallaToolService->handleGeminiToolCall($chatbot, $functionName, $sallaArgs);
+                                        $sallaResultJson = json_decode($sallaResult, true);
+
+                                        $functionCallData = $part['functionCall'];
+                                        $functionCallData['args'] = ! empty($functionCallData['args']) && is_array($functionCallData['args'])
+                                            ? (object) $functionCallData['args']
+                                            : new stdClass;
+                                        $sallaModelPart = ['functionCall' => $functionCallData];
+                                        if (isset($part['thoughtSignature'])) {
+                                            $sallaModelPart['thoughtSignature'] = $part['thoughtSignature'];
+                                        }
+
+                                        $followUpHistory = $newhistory;
+                                        $followUpHistory[] = [
+                                            'role'  => 'model',
+                                            'parts' => [$sallaModelPart],
+                                        ];
+                                        $followUpHistory[] = [
+                                            'role'  => 'user',
+                                            'parts' => [['functionResponse' => [
+                                                'name'     => $functionName,
+                                                'id'       => $functionId,
+                                                'response' => ['result' => $sallaResultJson],
+                                            ]]],
+                                        ];
+
+                                        $followUpClient = app(GeminiService::class);
+                                        $followUpResponse = $followUpClient
+                                            ->setHistory($followUpHistory)
+                                            ->setTools([])
+                                            ->streamGenerateContent($driver->enum()->value);
+
+                                        while (! $followUpResponse->getBody()->eof()) {
+                                            $followLine = trim($followUpClient->readLine($followUpResponse->getBody()));
+                                            if ($followLine === '' || $followLine === '[' || $followLine === ']' || $followLine === ',') {
+                                                continue;
+                                            }
+
+                                            try {
+                                                $followDecoded = json_decode($followLine, true, 512, JSON_THROW_ON_ERROR);
+                                            } catch (JsonException) {
+                                                continue;
+                                            }
+                                            if (isset($followDecoded['error'])) {
+                                                break;
+                                            }
+                                            if (isset($followDecoded['candidates'])) {
+                                                foreach ($followDecoded['candidates'] as $followCandidate) {
+                                                    $followParts = $followCandidate['content']['parts'] ?? [];
+                                                    foreach ($followParts as $followPart) {
+                                                        $followText = $followPart['text'] ?? '';
+                                                        if ($followText !== '') {
+                                                            $messageFix = str_replace(["\r\n", "\r", "\n"], '<br/>', $followText);
+                                                            $output .= $messageFix;
+                                                            $responsedText .= $followText;
+                                                            $total_used_tokens += countWords($followText);
+                                                            $this->emitStreamChunk($messageFix);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (connection_aborted()) {
+                                                break;
+                                            }
+                                        }
+
+                                        continue;
+                                    } catch (Throwable $e) {
+                                        Log::error('[SallaOrderTool] StreamService(Gemini): tool call threw', [
+                                            'function' => $functionName,
+                                            'message'  => $e->getMessage(),
+                                        ]);
+
+                                        $functionCallData = $part['functionCall'];
+                                        $functionCallData['args'] = ! empty($functionCallData['args']) && is_array($functionCallData['args'])
+                                            ? (object) $functionCallData['args']
+                                            : new stdClass;
+                                        $sallaModelPart = ['functionCall' => $functionCallData];
+                                        if (isset($part['thoughtSignature'])) {
+                                            $sallaModelPart['thoughtSignature'] = $part['thoughtSignature'];
+                                        }
+
+                                        $followUpHistory = $newhistory;
+                                        $followUpHistory[] = [
+                                            'role'  => 'model',
+                                            'parts' => [$sallaModelPart],
+                                        ];
+                                        $followUpHistory[] = [
+                                            'role'  => 'user',
+                                            'parts' => [['functionResponse' => [
+                                                'name'     => $functionName,
+                                                'id'       => $functionId,
+                                                'response' => ['error' => 'Unable to retrieve order status due to an error. Please try again or contact support.'],
+                                            ]]],
+                                        ];
+
+                                        $followUpClient = app(GeminiService::class);
+                                        $followUpResponse = $followUpClient
+                                            ->setHistory($followUpHistory)
+                                            ->setTools([])
+                                            ->streamGenerateContent($driver->enum()->value);
+
+                                        while (! $followUpResponse->getBody()->eof()) {
+                                            $followLine = trim($followUpClient->readLine($followUpResponse->getBody()));
+                                            if ($followLine === '' || $followLine === '[' || $followLine === ']' || $followLine === ',') {
+                                                continue;
+                                            }
+
+                                            try {
+                                                $followDecoded = json_decode($followLine, true, 512, JSON_THROW_ON_ERROR);
+                                            } catch (JsonException) {
+                                                continue;
+                                            }
+                                            if (isset($followDecoded['error'])) {
+                                                break;
+                                            }
+                                            if (isset($followDecoded['candidates'])) {
+                                                foreach ($followDecoded['candidates'] as $followCandidate) {
+                                                    $followParts = $followCandidate['content']['parts'] ?? [];
+                                                    foreach ($followParts as $followPart) {
+                                                        $followText = $followPart['text'] ?? '';
+                                                        if ($followText !== '') {
+                                                            $messageFix = str_replace(["\r\n", "\r", "\n"], '<br/>', $followText);
+                                                            $output .= $messageFix;
+                                                            $responsedText .= $followText;
+                                                            $total_used_tokens += countWords($followText);
+                                                            $this->emitStreamChunk($messageFix);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (connection_aborted()) {
+                                                break;
+                                            }
+                                        }
+
+                                        continue;
+                                    }
+                                }
                             }
 
                             if (str_starts_with($functionName, 'connector_') && class_exists(ConnectorToolService::class)) {

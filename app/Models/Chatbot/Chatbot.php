@@ -25,6 +25,7 @@ class Chatbot extends Model
         'height',
         'color',
         'status',
+        'salla_connection_id',
     ];
 
     public function imageUrl(): Attribute
@@ -53,6 +54,11 @@ class Chatbot extends Model
     public function domains(): HasMany
     {
         return $this->hasMany(Domain::class);
+    }
+
+    public function sallaConnection(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\SallaConnection::class, 'salla_connection_id');
     }
 
     public function canNewDomainAdd(): bool
