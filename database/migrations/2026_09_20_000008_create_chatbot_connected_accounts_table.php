@@ -24,7 +24,7 @@ return new class extends Migration
                 ->on('connected_accounts')
                 ->onDelete('cascade');
 
-            $table->unique(['chatbot_id', 'connected_account_id']);
+            $table->unique(['chatbot_id', 'connected_account_id'], 'chatbot_connected_accounts_unique');
         });
     }
 
