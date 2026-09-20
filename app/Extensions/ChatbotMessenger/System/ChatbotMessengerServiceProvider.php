@@ -80,8 +80,8 @@ class ChatbotMessengerServiceProvider extends ServiceProvider
                 'prefix'         => 'api/v2/chatbot',
                 'as'             => 'api.v2.chatbot.channel.',
             ], function (Router $router) {
-                // Global webhook via ConnectedAccount
-                $router->post('webhook/messenger', [ChatbotMessengerWebhookController::class, 'handleGlobal'])->name('messenger.global');
+                // Global webhook via ConnectedAccount (GET for verification, POST for events)
+                $router->match(['get', 'post'], 'webhook/messenger', [ChatbotMessengerWebhookController::class, 'handleGlobal'])->name('messenger.global');
                 // Legacy channel-based webhook
                 $router->any('{chatbotId}/channel/{channelId}/messenger', [ChatbotMessengerWebhookController::class, 'handle'])->name('messenger.post.handle');
             })->group([

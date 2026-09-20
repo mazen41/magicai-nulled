@@ -17,10 +17,18 @@ class ChatbotMessengerWebhookController extends Controller
 
     /**
      * Global webhook handler that routes via ConnectedAccount
+     * GET: Meta webhook verification
+     * POST: Handle actual Facebook Messenger events
      * Fallback to legacy channel-based routing for backward compatibility
      */
     public function handleGlobal(Request $request)
     {
+        // Handle Meta webhook verification (GET)
+        if ($request->isMethod('get')) {
+            return $this->verifyWebhookSubscription($request);
+        }
+
+        // Handle webhook events (POST)
         $pageId = data_get($request->input('entry.0'), 'id');
 
         if (!$pageId) {
@@ -50,7 +58,7 @@ class ChatbotMessengerWebhookController extends Controller
                         'selected_chatbot_id' => $chatbots->sortByDesc('updated_at')->first()->id,
                     ]);
                 }
-                
+
                 $chatbot = $chatbots->sortByDesc('updated_at')->first();
 
                 // Create or find channel
@@ -80,6 +88,37 @@ class ChatbotMessengerWebhookController extends Controller
         $this->verifyWebhook(setting('INSTAGRAM_APP_SECRET') ?? '');
 
         return response('OK', 200);
+    }
+
+    /**
+     * Verify Meta webhook subscription
+     * Meta sends GET with hub.mode, hub.verify_token, hub.challenge
+     */
+    protected function verifyWebhookSubscription(Request $request)
+    {
+        $mode = $request->query('hub_mode');
+        $token = $request->query('hub_verify_token');
+        $challenge = $request->query('hub_challenge');
+
+        $expectedToken = env('MESSENGER_WEBHOOK_VERIFY_TOKEN');
+
+        if (!$expectedToken) {
+            Log::error('Messenger webhook verification failed: MESSENGER_WEBHOOK_VERIFY_TOKEN not configured in .env');
+            return response('Webhook verification token not configured', 500);
+        }
+
+        if ($mode === 'subscribe' && $token === $expectedToken) {
+            Log::info('Messenger webhook verification successful');
+            return response($challenge, 200);
+        }
+
+        Log::warning('Messenger webhook verification failed', [
+            'mode' => $mode,
+            'token_received' => $token,
+            'token_expected' => $expectedToken,
+        ]);
+
+        return response('Forbidden', 403);
     }
 
     /**
