@@ -37,9 +37,8 @@ class ChatbotTelegramWebhookController extends Controller
             ->first();
 
         if ($account) {
-            // Find active chatbots for this account
-            $chatbots = \App\Extensions\Chatbot\System\Models\Chatbot::query()
-                ->where('connected_account_id', $account->id)
+            // Find active chatbots for this account using the new relationship
+            $chatbots = $account->extChatbots()
                 ->where('active', true)
                 ->get();
 

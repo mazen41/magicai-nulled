@@ -19,40 +19,33 @@ class ChatbotConnectedAccountController extends Controller
             ->where('user_id', $user->id)
             ->findOrFail($chatbotId);
 
-        $accountId = $request->input('connected_account_id');
-        $platform = $request->input('platform');
+        $accountIds = $request->input('connected_account_ids', []);
 
-        if ($accountId) {
-            // Verify ownership
-            $account = ConnectedAccount::query()
+        // Verify all accounts belong to the user and are connected
+        if (!empty($accountIds)) {
+            $accounts = ConnectedAccount::query()
                 ->where('user_id', $user->id)
                 ->where('connection_status', 'connected')
-                ->find($accountId);
+                ->whereIn('id', $accountIds)
+                ->get();
 
-            if (!$account) {
+            if ($accounts->count() !== count($accountIds)) {
                 return response()->json([
                     'status'  => 'error',
-                    'message' => trans('Connected account not found or access denied.'),
+                    'message' => trans('One or more connected accounts not found or access denied.'),
                 ], 403);
-            }
-
-            // Validate platform compatibility if provided
-            if ($platform && $account->platform !== $platform) {
-                return response()->json([
-                    'status'  => 'error',
-                    'message' => trans('Connected account platform does not match required platform.'),
-                ], 400);
             }
         }
 
-        $chatbot->update([
-            'connected_account_id' => $accountId ?: null,
-        ]);
+        // Sync the many-to-many relationship
+        $chatbot->connectedAccounts()->sync($accountIds);
 
         return response()->json([
             'status'  => 'success',
             'message' => trans('Account selection saved.'),
-            'data'    => ['connected_account_id' => $chatbot->connected_account_id],
+            'data'    => [
+                'connected_account_ids' => $chatbot->connectedAccounts->pluck('id')->toArray(),
+            ],
         ]);
     }
 }

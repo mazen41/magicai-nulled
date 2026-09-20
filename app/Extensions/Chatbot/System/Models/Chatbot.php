@@ -106,6 +106,15 @@ class Chatbot extends Model
         'woocommerce_consumer_secret',
     ];
 
+    protected $appends = [
+        'connected_account_ids',
+    ];
+
+    public function getConnectedAccountIdsAttribute()
+    {
+        return $this->connectedAccounts->pluck('id')->toArray();
+    }
+
     protected $casts = [
         'color_mode'                         => ColorModeEnum::class,
         'position'                           => PositionEnum::class,
@@ -182,5 +191,11 @@ class Chatbot extends Model
     public function connectedAccount(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(\App\Models\ConnectedAccount::class, 'connected_account_id');
+    }
+
+    public function connectedAccounts(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\ConnectedAccount::class, 'chatbot_connected_accounts', 'chatbot_id', 'connected_account_id')
+            ->withTimestamps();
     }
 }

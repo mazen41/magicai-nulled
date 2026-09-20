@@ -173,8 +173,8 @@ class ChatbotInstagramWebhookController extends Controller
 
         if (!$account) return null;
 
-        $chatbots = \App\Extensions\Chatbot\System\Models\Chatbot::query()
-            ->where('connected_account_id', $account->id)
+        // Use the new many-to-many relationship
+        $chatbots = $account->chatbots()
             ->where('active', true)
             ->get();
 

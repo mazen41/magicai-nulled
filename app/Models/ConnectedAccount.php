@@ -55,7 +55,13 @@ class ConnectedAccount extends Model
 
     public function chatbots(): HasMany
     {
-        return $this->hasMany(ExtChatbot::class, 'connected_account_id');
+        return $this->hasMany(\App\Extensions\Chatbot\System\Models\Chatbot::class, 'connected_account_id');
+    }
+
+    public function extChatbots(): BelongsToMany
+    {
+        return $this->belongsToMany(\App\Extensions\Chatbot\System\Models\Chatbot::class, 'chatbot_connected_accounts', 'connected_account_id', 'chatbot_id')
+            ->withTimestamps();
     }
 
     // --- Helpers ---

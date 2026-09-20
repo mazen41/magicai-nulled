@@ -1,49 +1,104 @@
-{{-- Connected Account Selector --}}
+{{-- Connected Accounts Multi-Selector --}}
 <div
-    class="col-start-1 col-end-1 row-start-1 row-end-1 transition-all mb-8"
+    class="col-start-1 col-end-1 row-start-1 row-end-1 transition-all"
     x-data="connectedAccountSelector"
     x-show="editingStep === 5"
 >
-    <h3 class="mb-2 text-base font-semibold">@lang('Platform Account')</h3>
-    <p class="mb-4 text-xs text-heading-foreground/60">
-        @lang('Select a connected account to link this chatbot to a messaging platform.')
+    <h2 class="mb-2 text-lg font-semibold">@lang('Channel')</h2>
+    <p class="mb-4 text-sm text-heading-foreground/60">
+        @lang('Connect this chatbot to one or more connected accounts.')
         <a href="{{ route('dashboard.user.integrations.index') }}" class="text-primary underline">
             @lang('Manage accounts')
         </a>
     </p>
 
-    <div class="flex items-center gap-3">
-        <select
-            class="lqd-input w-full max-w-sm"
-            x-model="selectedAccountId"
-            @change="saveAccountSelection()"
-        >
-            <option value="">@lang('— No platform account —')</option>
-            <template x-for="account in accounts" :key="account.id">
-                <option
-                    :value="account.id"
-                    :selected="account.id == activeChatbot.connected_account_id"
-                    x-text="account.platform_label + ' — ' + account.account_name"
-                ></option>
-            </template>
-        </select>
+    <div class="space-y-4">
+        <!-- Search -->
+        <div class="relative">
+            <input
+                type="text"
+                x-model="searchQuery"
+                placeholder="Search connected accounts..."
+                class="lqd-input w-full"
+            >
+        </div>
 
-        <template x-if="savingAccount">
-            <span class="text-xs text-heading-foreground/60">@lang('Saving...')</span>
-        </template>
-        <template x-if="!savingAccount && savedAccount">
-            <span class="text-xs text-green-600">@lang('Saved')</span>
+        <!-- Account List -->
+        <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+            <template x-if="loadingAccounts">
+                <div class="p-4 text-center text-sm text-gray-500">
+                    Loading...
+                </div>
+            </template>
+
+            <template x-if="!loadingAccounts && filteredAccounts.length === 0">
+                <div class="p-4 text-center text-sm text-gray-500">
+                    @lang('No connected accounts yet.')
+                    <a href="{{ route('dashboard.user.integrations.index') }}" class="text-primary underline">
+                        @lang('Connect an account')
+                    </a>
+                </div>
+            </template>
+
+            <template x-if="!loadingAccounts && filteredAccounts.length > 0">
+                <div class="max-h-64 overflow-y-auto">
+                    <template x-for="account in filteredAccounts" :key="account.id">
+                        <div
+                            class="flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
+                            @click="toggleAccount(account.id)"
+                        >
+                            <input
+                                type="checkbox"
+                                :checked="selectedAccountIds.includes(account.id)"
+                                @click.stop
+                                class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            >
+                            <div class="flex-1 flex items-center gap-3">
+                                <template x-if="account.account_avatar">
+                                    <img :src="account.account_avatar" class="w-8 h-8 rounded-full object-cover">
+                                </template>
+                                <template x-if="!account.account_avatar">
+                                    <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                                        <span x-text="account.account_name ? account.account_name.charAt(0).toUpperCase() : account.platform.charAt(0).toUpperCase()"></span>
+                                    </div>
+                                </template>
+                                <div class="flex-1">
+                                    <div class="font-medium text-sm" x-text="account.account_name"></div>
+                                    <div class="text-xs text-gray-500">
+                                        <span x-text="account.platform_label"></span>
+                                        <template x-if="account.account_username">
+                                            <span x-text="' · @' + account.account_username"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+        <!-- Selection Summary -->
+        <template x-if="selectedAccountIds.length > 0">
+            <div class="flex items-center justify-between text-sm">
+                <span class="text-gray-600 dark:text-gray-400">
+                    <span x-text="selectedAccountIds.length"></span> accounts selected
+                </span>
+                <button
+                    @click="saveAccountSelection()"
+                    :disabled="savingAccount"
+                    class="text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <template x-if="savingAccount">
+                        Saving...
+                    </template>
+                    <template x-if="!savingAccount">
+                        Save
+                    </template>
+                </button>
+            </div>
         </template>
     </div>
-
-    <template x-if="accounts.length === 0 && !loadingAccounts">
-        <p class="mt-3 text-xs text-orange-600">
-            @lang('No connected accounts found.')
-            <a href="{{ route('dashboard.user.integrations.index') }}" class="underline">
-                @lang('Connect a platform account first.')
-            </a>
-        </p>
-    </template>
 </div>
 
 @push('script')
@@ -53,9 +108,19 @@
         Alpine.data('connectedAccountSelector', () => ({
             accounts: [],
             loadingAccounts: false,
-            selectedAccountId: '',
+            selectedAccountIds: [],
+            searchQuery: '',
             savingAccount: false,
-            savedAccount: false,
+
+            get filteredAccounts() {
+                if (!this.searchQuery) return this.accounts;
+                const query = this.searchQuery.toLowerCase();
+                return this.accounts.filter(account => 
+                    account.account_name?.toLowerCase().includes(query) ||
+                    account.account_username?.toLowerCase().includes(query) ||
+                    account.platform_label?.toLowerCase().includes(query)
+                );
+            },
 
             init() {
                 this.$watch('editingStep', step => {
@@ -63,7 +128,7 @@
                 });
                 this.$watch('activeChatbot', chatbot => {
                     if (chatbot?.id) {
-                        this.selectedAccountId = chatbot.connected_account_id ?? '';
+                        this.selectedAccountIds = chatbot.connected_account_ids || [];
                     }
                 });
             },
@@ -86,7 +151,6 @@
                         ...a,
                         platform_label: platformLabels[a.platform] || a.platform,
                     }));
-                    this.selectedAccountId = this.activeChatbot?.connected_account_id ?? '';
                 } catch (e) {
                     console.error(e);
                 } finally {
@@ -94,14 +158,24 @@
                 }
             },
 
+            toggleAccount(accountId) {
+                const index = this.selectedAccountIds.indexOf(accountId);
+                if (index > -1) {
+                    this.selectedAccountIds.splice(index, 1);
+                } else {
+                    this.selectedAccountIds.push(accountId);
+                }
+            },
+
             async saveAccountSelection() {
                 if (!this.activeChatbot?.id) return;
                 this.savingAccount = true;
-                this.savedAccount = false;
 
                 try {
                     const formData = new FormData();
-                    formData.append('connected_account_id', this.selectedAccountId ?? '');
+                    this.selectedAccountIds.forEach(id => {
+                        formData.append('connected_account_ids[]', id);
+                    });
                     formData.append('_method', 'PUT');
                     formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
 
@@ -112,9 +186,8 @@
                     });
                     const data = await res.json();
                     if (data.status === 'success') {
-                        this.activeChatbot.connected_account_id = this.selectedAccountId || null;
-                        this.savedAccount = true;
-                        setTimeout(() => this.savedAccount = false, 3000);
+                        this.activeChatbot.connected_account_ids = data.data.connected_account_ids;
+                        toastr.success(data.message || '{{ __('Account selection saved.') }}');
                     } else {
                         toastr.error(data.message || '{{ __('Failed to save account selection.') }}');
                     }
@@ -129,282 +202,3 @@
 })();
 </script>
 @endpush
-
-@if (\App\Extensions\Chatbot\System\Helpers\ChatbotHelper::existChannels())
-	@php
-		$allowedChatbotChannels = \App\Extensions\Chatbot\System\Helpers\ChatbotHelper::allowedChannelKeys();
-	@endphp
-
-	{{-- Editing Step 3 - Train --}}
-	<div
-		class="col-start-1 col-end-1 row-start-1 row-end-1 transition-all"
-		data-step="3"
-		x-data="externalChatbotChannel"
-		x-show="editingStep === 5"
-		x-transition:enter-start="opacity-0 -translate-x-3"
-		x-transition:enter-end="opacity-100 translate-x-0"
-		x-transition:leave-start="opacity-100 translate-x-0"
-		x-transition:leave-end="opacity-0 translate-x-3"
-	>
-		<h2 class="mb-3.5">
-			@lang('Chatbot Channel')
-		</h2>
-		<p class="mb-3 text-xs/5 opacity-60 lg:max-w-[360px]">
-			@lang('This step is optional, but you can enhance your chatbot experience through different channels.')
-		</p>
-
-		<div class="mt-10 lqd-social-media-cards-grid gap-3 flex ">
-			@if (in_array('telegram', $allowedChatbotChannels, true))
-				@includeIf('telegram-channel::channel-card')
-			@endif
-			@if (in_array('whatsapp', $allowedChatbotChannels, true))
-				@includeIf('whatsapp-channel::channel-card')
-			@endif
-			@if (in_array('messenger', $allowedChatbotChannels, true))
-				@includeIf('messenger-channel::channel-card')
-			@endif
-			@if (in_array('instagram', $allowedChatbotChannels, true))
-				@includeIf('instagram-channel::channel-card')
-			@endif
-		</div>
-
-		@include('chatbot::partials.channel-table')
-	</div>
-	@push('script')
-		<script>
-
-			(() => {
-			document.addEventListener('alpine:init', () => {
-				Alpine.data('externalChatbotChannel', () => ({
-					activeTab: 'channel',
-					fetching: false,
-					storeChannelFetch: false,
-					channelFetch: false,
-					chatbotChannels: [],
-					instagramCredentials: {},
-					instagramStatus: null,
-					instagramPopupOpen: false,
-					init() {
-						this.$watch('editingStep', currentStep => {
-							if (currentStep === 5) {
-								this.fetchChannels();
-							}
-						})
-
-						window.addEventListener('message', event => {
-							if (event.origin !== window.location.origin) {
-								return;
-							}
-
-							if (event.data?.type === 'chatbot-instagram:authorized') {
-								this.instagramPopupOpen = false;
-
-								const payload = event.data.payload || {};
-
-								if (!payload.access_token) {
-									this.instagramStatus = '{{ __('Instagram data could not be retrieved. Please try again.') }}';
-									toastr.error('{{ __('Instagram data could not be retrieved. Please try again..') }}');
-
-									return;
-								}
-
-								this.instagramCredentials = payload;
-								this.instagramStatus = '{{ __('Instagram authorisation has been verified. Channel is being added...') }}';
-
-								this.storeChannel('storeForm-instagram');
-							}
-						});
-					},
-					openInstagramOauth() {
-
-						@if(\App\Helpers\Classes\MarketplaceHelper::isRegistered('chatbot-instagram'))
-							if (!this.activeChatbot || !this.activeChatbot.id) {
-								toastr.error('{{ __('First, you must select a chatbot.') }}');
-
-								return;
-							}
-
-							const url = new URL('{{ route('chatbot.instagram.oauth.redirect') }}', window.location.origin);
-
-							url.searchParams.set('chatbot_id', this.activeChatbot.id);
-							url.searchParams.set('return_url', window.location.href);
-
-							const popup = window.open(url.toString(), 'instagram-oauth', 'width=520,height=780');
-
-							if (!popup) {
-								toastr.error('{{ __('The browser has blocked pop-ups. Please allow them.') }}');
-
-								return;
-							}
-
-							this.instagramPopupOpen = true;
-							popup.focus();
-						@else
-
-							return;
-
-						@endif
-
-					},
-					async deleteToClipboard(id) {
-						@if($app_is_demo)
-						       return toastr.error('{{ trans('This feature is disabled in demo mode.') }}')
-						@endif
-						if(confirm('If you delete the channel, all conversations linked to it will stop receiving messages. This may lead to some issues.')) {
-							this.storeChannelFetch = true;
-
-							const formData = new FormData();
-							formData.append('channel_id', id)
-
-							fetch('{{ route('dashboard.chatbot-multi-channel.delete') }}' , {
-								method: 'POST',
-								headers: {
-									'Accept': 'application/json',
-									'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-								},
-								body: formData
-							}).then(async response => {
-								if (!response.ok) {
-									const error = await response.json();
-									toastr.error(error.message || 'Bir hata oluştu');
-									this.storeChannelFetch = false;
-									return;
-								}
-
-								const data = await response.json();
-
-								if (data.status === 'success') {
-
-									this.chatbotChannels = this.chatbotChannels.filter(channel => channel.id !== id);
-
-									toastr.success(data.message);
-
-									this.storeChannelFetch = false;
-								}
-								else {
-									toastr.error(data.message || 'An error has occurred');
-									this.storeChannelFetch = false;
-								}
-							}).catch(error => {
-								this.storeChannelFetch = false;
-								toastr.error(error.message || 'An error occurred while sending the request');
-							});
-						}
-					},
-					copyToClipboard(text) {
-						navigator.clipboard.writeText(text)
-							.then(() => {
-								toastr.success('The webhook has been copied to the clipboard.');
-							})
-							.catch(err => {
-								console.error('Copy error:', err);
-								toastr.error('The webhook could not be copied.');
-							});
-					},
-					setActiveTab(tab) {
-						if (tab === this.activeTab) return;
-
-						this.activeTab = tab;
-					},
-					async fetchChannels() {
-						this.channelFetch = true;
-
-						const formData = new FormData();
-
-						formData.append('chatbot_id', this.activeChatbot.id)
-
-						fetch('{{ route('dashboard.chatbot-multi-channel.index') }}', {
-							method: 'POST',
-							headers: {
-								'Accept': 'application/json',
-								'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-							},
-							body: formData
-						}).then(async response => {
-							if (!response.ok) {
-								const error = await response.json();
-								toastr.error(error.message || '{{ trans('An error occurred') }}');
-								this.channelFetch = false;
-								return;
-							}
-
-							const data = await response.json();
-
-							if (data.status === 'success') {
-
-								this.chatbotChannels = data.data;
-
-								this.channelFetch = false;
-							}
-						})
-							.catch(error => {
-								this.channelFetch = false;
-								toastr.error(error.message || '{{ trans('An error occurred while sending the request.') }}');
-							});
-					},
-					storeChannel(id) {
-						this.storeChannelFetch = true;
-
-						const form = document.getElementById(id);
-						const formData = new FormData(form);
-						formData.append('chatbot_id', this.activeChatbot.id)
-
-						fetch(form.action, {
-							method: 'POST',
-							headers: {
-								'Accept': 'application/json',
-								'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-							},
-							body: formData
-						}).then(async response => {
-
-							if (!response.ok) {
-								const error = await response.json();
-
-								toastr.error(error.message || '{{ trans('An error occurred') }}');
-
-								this.storeChannelFetch = false;
-
-								return;
-							}
-
-							const data = await response.json();
-
-							if (data.status === 'success') {
-
-								this.chatbotChannels.push(data.data);
-
-								if (id === 'storeForm-instagram') {
-									this.instagramStatus = '{{ __('Instagram kanalı bağlandı.') }}';
-									this.instagramCredentials = {};
-								}
-
-								toastr.success(data.message);
-
-								this.storeChannelFetch = false;
-							}
-							else {
-								if (id === 'storeForm-instagram') {
-									this.instagramStatus = data.message || '{{ __('Instagram kanalı eklenirken hata oluştu.') }}';
-								}
-
-								toastr.error(data.message || '{{ trans('An error occurred') }}');
-								this.storeChannelFetch = false;
-							}
-						}).catch(error => {
-							this.storeChannelFetch = false;
-
-							if (id === 'storeForm-instagram') {
-								this.instagramStatus = error.message || '{{ __('Instagram kanalı eklenirken hata oluştu.') }}';
-							}
-
-							toastr.error(error.message || '{{ trans('An error occurred while sending the request.') }}');
-						});
-					}
-
-				}));
-			});
-		})();
-	</script>
-	@endpush
-@endif
