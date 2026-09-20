@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Extensions\Chatbot\System\Models\Chatbot as ExtChatbot;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ConnectedAccount extends Model
@@ -58,7 +59,7 @@ class ConnectedAccount extends Model
         return $this->hasMany(\App\Extensions\Chatbot\System\Models\Chatbot::class, 'connected_account_id');
     }
 
-    public function extChatbots(): BelongsToMany
+    public function extChatbots(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
         return $this->belongsToMany(\App\Extensions\Chatbot\System\Models\Chatbot::class, 'chatbot_connected_accounts', 'connected_account_id', 'chatbot_id')
             ->withTimestamps();
