@@ -256,8 +256,6 @@ return [
         LaravelJsonLocationsManagerServiceProvider::class,
         ServiceProvider::class,
         themeServiceProvider::class,
-        App\Extensions\ChatbotMessenger\System\ChatbotMessengerServiceProvider::class,
-        App\Extensions\ChatbotInstagram\System\ChatbotInstagramServiceProvider::class,
     ],
 
     /*
