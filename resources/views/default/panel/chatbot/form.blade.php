@@ -151,6 +151,34 @@
                         <div class="mb-[20px]">
                             <label
                                     class="form-label"
+                                    for="salla_connection_id"
+                            >
+                                {{ __('Salla Connection') }}
+                            </label>
+                            <select
+                                    class="form-select"
+                                    id="salla_connection_id"
+                                    name="salla_connection_id"
+                            >
+                                <option value="">{{ __('No Salla Connection') }}</option>
+                                @if(auth()->check())
+                                    @php
+                                        $sallaConnections = \App\Models\SallaConnection::where('user_id', auth()->id())->get();
+                                    @endphp
+                                    @foreach($sallaConnections as $connection)
+                                        <option
+                                                value="{{ $connection->id }}"
+                                                {{ $chatbotData != null && $chatbotData->salla_connection_id == $connection->id ? 'selected' : null }}
+                                        >{{ $connection->store_name ?? 'Salla Store #' . $connection->id }}</option>
+                                    @endforeach
+                                @endif
+                            </select>
+                            <small class="text-muted">{{ __('Select a Salla connection to enable order status checking') }}</small>
+                        </div>
+
+                        <div class="mb-[20px]">
+                            <label
+                                    class="form-label"
                                     for="image"
                             >
                                 {{ __('Image') }}
