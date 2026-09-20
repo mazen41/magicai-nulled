@@ -1,8 +1,9 @@
 {{-- Connected Accounts Multi-Selector --}}
 <div
     class="col-start-1 col-end-1 row-start-1 row-end-1 transition-all"
-    x-data="connectedAccountSelector"
+    x-data="$store.connectedAccountSelector"
     x-show="editingStep === 5"
+    x-cloak
 >
     <h2 class="mb-2 text-lg font-semibold">@lang('Channel')</h2>
     <p class="mb-4 text-sm text-heading-foreground/60">
@@ -103,7 +104,8 @@
 <script>
 (() => {
     document.addEventListener('alpine:init', () => {
-        Alpine.data('connectedAccountSelector', () => ({
+        // Register component globally as a store for better accessibility
+        Alpine.store('connectedAccountSelector', () => ({
             accounts: [],
             loadingAccounts: false,
             selectedAccountIds: [],
