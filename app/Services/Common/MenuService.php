@@ -2714,9 +2714,9 @@ class MenuService
             'integration' => [
                 'parent_key'       => null,
                 'key'              => 'integration',
-                'route'            => 'dashboard.user.integration.index',
+                'route'            => 'dashboard.user.integrations.index',
                 'route_slug'       => null,
-                'label'            => 'Integration',
+                'label'            => 'Connected Accounts',
                 'data-name'        => Introduction::INTEGRATION,
                 'icon'             => 'tabler-webhook',
                 'svg'              => null,
@@ -2726,7 +2726,7 @@ class MenuService
                 'type'             => 'item',
                 'extension'        => null,
                 'active_condition' => [
-                    'dashboard.user.integration.*',
+                    'dashboard.user.integrations.*',
                 ],
                 'show_condition' => true,
             ],

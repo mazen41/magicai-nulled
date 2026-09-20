@@ -180,14 +180,6 @@ Route::middleware(['auth', 'updateUserActivity'])
                         Route::get('callback', [\App\Http\Controllers\Integration\MessengerOAuthController::class, 'callback'])
                             ->name('callback');
                     });
-
-                    // Telegram OAuth (bot token)
-                    Route::post('telegram/connect', [\App\Http\Controllers\Integration\TelegramOAuthController::class, 'connect'])
-                        ->name('telegram.connect');
-
-                    // WhatsApp (Twilio) connection
-                    Route::post('whatsapp/connect', [\App\Http\Controllers\Integration\WhatsAppOAuthController::class, 'connect'])
-                        ->name('whatsapp.connect');
                 });
 
                 // Salla OAuth

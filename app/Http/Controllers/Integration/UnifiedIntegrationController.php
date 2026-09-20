@@ -109,24 +109,6 @@ class UnifiedIntegrationController extends Controller
                 'enabled'      => \App\Helpers\Classes\MarketplaceHelper::isRegistered('chatbot-messenger'),
                 'description'  => 'Connect Facebook Pages to handle Messenger conversations.',
             ],
-            'whatsapp' => [
-                'name'         => 'WhatsApp (Twilio)',
-                'icon'         => 'whatsapp.svg',
-                'connect_route' => null,
-                'connect_url'  => null,
-                'oauth'        => false,
-                'enabled'      => \App\Helpers\Classes\MarketplaceHelper::isRegistered('chatbot-whatsapp'),
-                'description'  => 'Configure WhatsApp via Twilio credentials.',
-            ],
-            'telegram' => [
-                'name'         => 'Telegram',
-                'icon'         => 'telegram.svg',
-                'connect_route' => null,
-                'connect_url'  => null,
-                'oauth'        => false,
-                'enabled'      => \App\Helpers\Classes\MarketplaceHelper::isRegistered('chatbot-telegram'),
-                'description'  => 'Connect via Telegram Bot Token.',
-            ],
         ];
     }
 }
