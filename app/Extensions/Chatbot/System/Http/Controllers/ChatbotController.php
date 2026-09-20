@@ -36,6 +36,7 @@ class ChatbotController extends Controller
         return view('chatbot::index', [
             'chatbots' => $this->service->query()
                 ->with('channels:id,chatbot_id,channel')
+                ->with('connectedAccounts:id')
                 ->where('user_id', Auth::id())
                 ->orderBy('created_at', 'desc')
                 ->paginate(perPage: 100),

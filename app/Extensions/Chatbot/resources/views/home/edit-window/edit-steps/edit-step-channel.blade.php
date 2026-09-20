@@ -78,26 +78,24 @@
             </template>
         </div>
 
-        <!-- Selection Summary -->
-        <template x-if="selectedAccountIds.length > 0">
-            <div class="flex items-center justify-between text-sm">
-                <span class="text-gray-600 dark:text-gray-400">
-                    <span x-text="selectedAccountIds.length"></span> accounts selected
-                </span>
-                <button
-                    @click="saveAccountSelection()"
-                    :disabled="savingAccount"
-                    class="text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <template x-if="savingAccount">
-                        Saving...
-                    </template>
-                    <template x-if="!savingAccount">
-                        Save
-                    </template>
-                </button>
-            </div>
-        </template>
+        <!-- Selection Summary & Save Button -->
+        <div class="flex items-center justify-between text-sm mt-4">
+            <span class="text-gray-600 dark:text-gray-400">
+                <span x-text="selectedAccountIds.length"></span> accounts selected
+            </span>
+            <button
+                @click="saveAccountSelection()"
+                :disabled="savingAccount"
+                class="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+                <template x-if="savingAccount">
+                    Saving...
+                </template>
+                <template x-if="!savingAccount">
+                    Save Connected Accounts
+                </template>
+            </button>
+        </div>
     </div>
 </div>
 
@@ -128,7 +126,12 @@
                 });
                 this.$watch('activeChatbot', chatbot => {
                     if (chatbot?.id) {
-                        this.selectedAccountIds = chatbot.connected_account_ids || [];
+                        // Initialize from chatbot's connected_account_ids if available
+                        if (chatbot.connected_account_ids && Array.isArray(chatbot.connected_account_ids)) {
+                            this.selectedAccountIds = chatbot.connected_account_ids;
+                        } else {
+                            this.selectedAccountIds = [];
+                        }
                     }
                 });
             },
@@ -176,12 +179,14 @@
                     this.selectedAccountIds.forEach(id => {
                         formData.append('connected_account_ids[]', id);
                     });
-                    formData.append('_method', 'PUT');
                     formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
 
                     const res = await fetch(`{{ route('api.v2.chatbot.ext.connected-account.update', ['chatbotId' => 'PLACEHOLDER']) }}`.replace('PLACEHOLDER', this.activeChatbot.id), {
-                        method: 'POST',
-                        headers: { 'Accept': 'application/json' },
+                        method: 'PUT',
+                        headers: { 
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        },
                         body: formData,
                     });
                     const data = await res.json();
@@ -192,6 +197,7 @@
                         toastr.error(data.message || '{{ __('Failed to save account selection.') }}');
                     }
                 } catch (e) {
+                    console.error(e);
                     toastr.error('{{ __('An error occurred.') }}');
                 } finally {
                     this.savingAccount = false;

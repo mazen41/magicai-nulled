@@ -174,7 +174,7 @@ class ChatbotServiceProvider extends ServiceProvider implements ExtensionRegiste
                     });
 
                 // Connected Account API
-                $route->post('api/v2/chatbot/ext/{chatbotId}/connected-account',
+                $route->match(['put', 'patch'], 'api/v2/chatbot/ext/{chatbotId}/connected-account',
                     [\App\Extensions\Chatbot\System\Http\Controllers\Api\ChatbotConnectedAccountController::class, 'update']
                 )->name('api.v2.chatbot.ext.connected-account.update');
                 $route->group([
