@@ -21,6 +21,13 @@ class ChatbotConnectedAccountController extends Controller
 
         $accountIds = $request->input('connected_account_ids', []);
 
+        // Debug: Log what was received
+        \Log::info('Connected Account Update', [
+            'chatbot_id' => $chatbotId,
+            'account_ids_received' => $accountIds,
+            'account_ids_count' => count($accountIds),
+        ]);
+
         // Verify all accounts belong to the user and are connected
         if (!empty($accountIds)) {
             $accounts = ConnectedAccount::query()
@@ -30,6 +37,10 @@ class ChatbotConnectedAccountController extends Controller
                 ->get();
 
             if ($accounts->count() !== count($accountIds)) {
+                \Log::warning('Connected Account ownership validation failed', [
+                    'requested' => $accountIds,
+                    'found' => $accounts->pluck('id')->toArray(),
+                ]);
                 return response()->json([
                     'status'  => 'error',
                     'message' => trans('One or more connected accounts not found or access denied.'),
@@ -39,6 +50,12 @@ class ChatbotConnectedAccountController extends Controller
 
         // Sync the many-to-many relationship
         $chatbot->connectedAccounts()->sync($accountIds);
+
+        \Log::info('Connected Account Sync completed', [
+            'chatbot_id' => $chatbotId,
+            'synced_ids' => $accountIds,
+            'resulting_ids' => $chatbot->connectedAccounts->pluck('id')->toArray(),
+        ]);
 
         return response()->json([
             'status'  => 'success',

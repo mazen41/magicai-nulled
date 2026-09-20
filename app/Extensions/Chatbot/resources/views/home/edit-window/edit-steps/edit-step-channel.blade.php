@@ -183,6 +183,9 @@
                     });
                     formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
 
+                    console.log('Sending connected_account_ids:', this.selectedAccountIds);
+                    console.log('FormData entries:', Array.from(formData.entries()));
+
                     const res = await fetch(`{{ route('api.v2.chatbot.ext.connected-account.update', ['chatbotId' => 'PLACEHOLDER']) }}`.replace('PLACEHOLDER', this.activeChatbot.id), {
                         method: 'PUT',
                         headers: { 
@@ -192,6 +195,7 @@
                         body: formData,
                     });
                     const data = await res.json();
+                    console.log('API response:', data);
                     if (data.status === 'success') {
                         this.activeChatbot.connected_account_ids = data.data.connected_account_ids;
                         toastr.success(data.message || '{{ __('Account selection saved.') }}');
@@ -199,7 +203,7 @@
                         toastr.error(data.message || '{{ __('Failed to save account selection.') }}');
                     }
                 } catch (e) {
-                    console.error(e);
+                    console.error('Save error:', e);
                     toastr.error('{{ __('An error occurred.') }}');
                 } finally {
                     this.savingAccount = false;
