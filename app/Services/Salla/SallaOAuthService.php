@@ -61,8 +61,7 @@ class SallaOAuthService
      */
     public function exchangeCodeForTokens(string $code): array
     {
-        $response = Http::timeout(30)
-            ->retry(3, 100)
+        $response = Http::asForm()->timeout(30)
             ->post(config('salla.oauth.token_url'), [
                 'grant_type' => 'authorization_code',
                 'client_id' => config('salla.client_id'),
@@ -98,8 +97,7 @@ class SallaOAuthService
      */
     public function getUserInfo(string $accessToken): array
     {
-        $response = Http::timeout(30)
-            ->retry(3, 100)
+        $response = Http::asForm()->timeout(30)
             ->withToken($accessToken)
             ->get(config('salla.oauth.user_info_url'));
 
@@ -193,8 +191,7 @@ class SallaOAuthService
                 throw new RuntimeException('No refresh token available');
             }
 
-            $response = Http::timeout(30)
-                ->retry(3, 100)
+            $response = Http::asForm()->timeout(30)
                 ->post(config('salla.oauth.token_url'), [
                     'grant_type' => 'refresh_token',
                     'refresh_token' => $connection->refresh_token,

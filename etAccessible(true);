@@ -1,0 +1,314 @@
+[90m= [39m[34;4mReflectionClass[39;24m {#10801
+    +[1mname[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+    [34mextends[39m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mContracts[39m\\[32mBaseMetaHelper[39m[32m"[39m,
+    [34mimplements[39m: [],
+    [34mconstants[39m: [],
+    [34mproperties[39m: [
+      [34m"[39m[34mconfig[39m[34m"[39m => [34;4mReflectionProperty[39;24m {#10799
+        +[1mname[22m: [32m"[39m[32mconfig[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mmodifiers[39m: [32m"[39m[32mprotected[39m[32m"[39m,
+      },
+      [34m"[39m[34maccessToken[39m[34m"[39m => [34;4mReflectionProperty[39;24m {#10776
+        +[1mname[22m: [32m"[39m[32maccessToken[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mmodifiers[39m: [32m"[39m[32mprotected[39m[32m"[39m,
+      },
+    ],
+    [34mmethods[39m: [
+      [34m"[39m[34m__construct[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10797
+        +[1mname[22m: [32m"[39m[32m__construct[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$config[39m: [34;4mReflectionParameter[39;24m {#10859
+            +[1mname[22m: [32m"[39m[32mconfig[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32marray[39m[32m"[39m,
+            [34mdefault[39m: [36mnull[39m,
+          },
+          [34m$accessToken[39m: [34;4mReflectionParameter[39;24m {#10856
+            +[1mname[22m: [32m"[39m[32maccessToken[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+            [34mdefault[39m: [36mnull[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mapiClient[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10796
+        +[1mname[22m: [32m"[39m[32mapiClient[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mPendingRequest[39m[32m"[39m,
+        [34mmodifiers[39m: [32m"[39m[32mprivate[39m[32m"[39m,
+      },
+      [34m"[39m[34mauthRedirect[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10835
+        +[1mname[22m: [32m"[39m[32mauthRedirect[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mRedirectResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$scopes[39m: [34;4mReflectionParameter[39;24m {#10863
+            +[1mname[22m: [32m"[39m[32mscopes[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32marray[39m[32m"[39m,
+            [34mdefault[39m: [],
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic static[39m[32m"[39m,
+      },
+      [34m"[39m[34mrefreshAccessToken[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10836
+        +[1mname[22m: [32m"[39m[32mrefreshAccessToken[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mgetAccountInfo[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10837
+        +[1mname[22m: [32m"[39m[32mgetAccountInfo[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$fields[39m: [34;4mReflectionParameter[39;24m {#10869
+            +[1mname[22m: [32m"[39m[32mfields[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32marray[39m[32m"[39m,
+            [34mdefault[39m: [36mnull[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mgetInstagramInfo[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10838
+        +[1mname[22m: [32m"[39m[32mgetInstagramInfo[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$igId[39m: [34;4mReflectionParameter[39;24m {#10873
+            +[1mname[22m: [32m"[39m[32migId[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+          [34m$fields[39m: [34;4mReflectionParameter[39;24m {#10875
+            +[1mname[22m: [32m"[39m[32mfields[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32marray[39m[32m"[39m,
+            [34mdefault[39m: [36mnull[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mpublishSingleMediaPost[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10839
+        +[1mname[22m: [32m"[39m[32mpublishSingleMediaPost[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$igId[39m: [34;4mReflectionParameter[39;24m {#10878
+            +[1mname[22m: [32m"[39m[32migId[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+          [34m$postData[39m: [34;4mReflectionParameter[39;24m {#10880
+            +[1mname[22m: [32m"[39m[32mpostData[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32marray[39m[32m"[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mpublishStory[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10840
+        +[1mname[22m: [32m"[39m[32mpublishStory[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$igId[39m: [34;4mReflectionParameter[39;24m {#10883
+            +[1mname[22m: [32m"[39m[32migId[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+          [34m$imageUrl[39m: [34;4mReflectionParameter[39;24m {#10885
+            +[1mname[22m: [32m"[39m[32mimageUrl[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mpublishCarouselPost[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10841
+        +[1mname[22m: [32m"[39m[32mpublishCarouselPost[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$igId[39m: [34;4mReflectionParameter[39;24m {#10888
+            +[1mname[22m: [32m"[39m[32migId[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+          [34m$files[39m: [34;4mReflectionParameter[39;24m {#10890
+            +[1mname[22m: [32m"[39m[32mfiles[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32marray[39m[32m"[39m,
+          },
+          [34m$mediaType[39m: [34;4mReflectionParameter[39;24m {#10891
+            +[1mname[22m: [32m"[39m[32mmediaType[39m[32m"[39m,
+            [34mposition[39m: [35m2[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+            [34mdefault[39m: [32m"[39m[32mimage[39m[32m"[39m,
+          },
+          [34m$caption[39m: [34;4mReflectionParameter[39;24m {#10892
+            +[1mname[22m: [32m"[39m[32mcaption[39m[32m"[39m,
+            [34mposition[39m: [35m3[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+            [34mdefault[39m: [32m""[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mpublishContainer[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10842
+        +[1mname[22m: [32m"[39m[32mpublishContainer[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$igId[39m: [34;4mReflectionParameter[39;24m {#10895
+            +[1mname[22m: [32m"[39m[32migId[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+          [34m$creation_id[39m: [34;4mReflectionParameter[39;24m {#10896
+            +[1mname[22m: [32m"[39m[32mcreation_id[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mprotected[39m[32m"[39m,
+      },
+      [34m"[39m[34mcheckUploadStatus[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10843
+        +[1mname[22m: [32m"[39m[32mcheckUploadStatus[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32marray[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$mediaId[39m: [34;4mReflectionParameter[39;24m {#10899
+            +[1mname[22m: [32m"[39m[32mmediaId[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+          [34m$delayInSeconds[39m: [34;4mReflectionParameter[39;24m {#10901
+            +[1mname[22m: [32m"[39m[32mdelayInSeconds[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32mint[39m[32m"[39m,
+            [34mdefault[39m: [35m3[39m,
+          },
+          [34m$maxAttempts[39m: [34;4mReflectionParameter[39;24m {#10902
+            +[1mname[22m: [32m"[39m[32mmaxAttempts[39m[32m"[39m,
+            [34mposition[39m: [35m2[39m,
+            [34mtypeHint[39m: [32m"[39m[32mint[39m[32m"[39m,
+            [34mdefault[39m: [35m10[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mprivate[39m[32m"[39m,
+      },
+      [34m"[39m[34mgetMediaStatus[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10844
+        +[1mname[22m: [32m"[39m[32mgetMediaStatus[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$mediaId[39m: [34;4mReflectionParameter[39;24m {#10905
+            +[1mname[22m: [32m"[39m[32mmediaId[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mprivate[39m[32m"[39m,
+      },
+      [34m"[39m[34mgetMedia[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10845
+        +[1mname[22m: [32m"[39m[32mgetMedia[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$igId[39m: [34;4mReflectionParameter[39;24m {#10909
+            +[1mname[22m: [32m"[39m[32migId[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+          [34m$limit[39m: [34;4mReflectionParameter[39;24m {#10911
+            +[1mname[22m: [32m"[39m[32mlimit[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32mint[39m[32m"[39m,
+            [34mdefault[39m: [35m50[39m,
+          },
+          [34m$fields[39m: [34;4mReflectionParameter[39;24m {#10912
+            +[1mname[22m: [32m"[39m[32mfields[39m[32m"[39m,
+            [34mposition[39m: [35m2[39m,
+            [34mtypeHint[39m: [32m"[39m[32marray[39m[32m"[39m,
+            [34mdefault[39m: [36mnull[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mgetPostAnalytics[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10846
+        +[1mname[22m: [32m"[39m[32mgetPostAnalytics[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mInstagram[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$postId[39m: [34;4mReflectionParameter[39;24m {#10915
+            +[1mname[22m: [32m"[39m[32mpostId[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+          [34m$fields[39m: [34;4mReflectionParameter[39;24m {#10917
+            +[1mname[22m: [32m"[39m[32mfields[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32marray[39m[32m"[39m,
+            [34mdefault[39m: [],
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mgetAccessToken[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10847
+        +[1mname[22m: [32m"[39m[32mgetAccessToken[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mContracts[39m\\[32mBaseMetaHelper[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mIlluminate[39m\\[32mHttp[39m\\[32mClient[39m\\[32mResponse[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$code[39m: [34;4mReflectionParameter[39;24m {#10920
+            +[1mname[22m: [32m"[39m[32mcode[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+      [34m"[39m[34mapiUrl[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10848
+        +[1mname[22m: [32m"[39m[32mapiUrl[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mContracts[39m\\[32mBaseMetaHelper[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mstring[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$endpoint[39m: [34;4mReflectionParameter[39;24m {#10924
+            +[1mname[22m: [32m"[39m[32mendpoint[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+          [34m$params[39m: [34;4mReflectionParameter[39;24m {#10926
+            +[1mname[22m: [32m"[39m[32mparams[39m[32m"[39m,
+            [34mposition[39m: [35m1[39m,
+            [34mtypeHint[39m: [32m"[39m[32marray[39m[32m"[39m,
+            [34mdefault[39m: [],
+          },
+          [34m$isBaseUrl[39m: [34;4mReflectionParameter[39;24m {#10927
+            +[1mname[22m: [32m"[39m[32misBaseUrl[39m[32m"[39m,
+            [34mposition[39m: [35m2[39m,
+            [34mtypeHint[39m: [32m"[39m[32mbool[39m[32m"[39m,
+            [34mdefault[39m: [36mfalse[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mprotected[39m[32m"[39m,
+      },
+      [34m"[39m[34msetToken[39m[34m"[39m => [34;4mReflectionMethod[39;24m {#10849
+        +[1mname[22m: [32m"[39m[32msetToken[39m[32m"[39m,
+        +[1mclass[22m: [32m"[39m[32mApp[39m\\[32mExtensions[39m\\[32mSocialMedia[39m\\[32mSystem[39m\\[32mHelpers[39m\\[32mContracts[39m\\[32mBaseMetaHelper[39m[32m"[39m,
+        [34mreturnType[39m: [32m"[39m[32mself[39m[32m"[39m,
+        [34mparameters[39m: {
+          [34m$bearerToken[39m: [34;4mReflectionParameter[39;24m {#10930
+            +[1mname[22m: [32m"[39m[32mbearerToken[39m[32m"[39m,
+            [34mposition[39m: [35m0[39m,
+            [34mtypeHint[39m: [32m"[39m[32mstring[39m[32m"[39m,
+          },
+        },
+        [34mmodifiers[39m: [32m"[39m[32mpublic[39m[32m"[39m,
+      },
+    ],
+  }
