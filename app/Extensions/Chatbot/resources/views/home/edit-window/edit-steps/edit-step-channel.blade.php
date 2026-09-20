@@ -1,7 +1,110 @@
 {{-- Connected Accounts Multi-Selector --}}
 <div
     class="col-start-1 col-end-1 row-start-1 row-end-1 transition-all"
-    x-data="$store.connectedAccountSelector"
+    x-data="{
+        accounts: [],
+        loadingAccounts: false,
+        selectedAccountIds: [],
+        searchQuery: '',
+        savingAccount: false,
+
+        get filteredAccounts() {
+            if (!this.searchQuery) return this.accounts;
+            const query = this.searchQuery.toLowerCase();
+            return this.accounts.filter(account => 
+                account.account_name?.toLowerCase().includes(query) ||
+                account.account_username?.toLowerCase().includes(query) ||
+                account.platform_label?.toLowerCase().includes(query)
+            );
+        },
+
+        init() {
+            this.$watch('editingStep', step => {
+                if (step === 5) this.fetchAccounts();
+            });
+            this.$watch('activeChatbot', chatbot => {
+                if (chatbot?.id) {
+                    if (chatbot.connected_account_ids && Array.isArray(chatbot.connected_account_ids)) {
+                        this.selectedAccountIds = chatbot.connected_account_ids;
+                    } else {
+                        this.selectedAccountIds = [];
+                    }
+                }
+            });
+        },
+
+        async fetchAccounts() {
+            this.loadingAccounts = true;
+            try {
+                const res = await fetch('{{ route('dashboard.user.integrations.api.accounts') }}', {
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await res.json();
+                const platformLabels = {
+                    salla: 'Salla',
+                    instagram: 'Instagram',
+                    messenger: 'Messenger',
+                    whatsapp: 'WhatsApp',
+                    telegram: 'Telegram',
+                };
+                this.accounts = (data.data || []).map(a => ({
+                    ...a,
+                    platform_label: platformLabels[a.platform] || a.platform,
+                }));
+            } catch (e) {
+                console.error(e);
+            } finally {
+                this.loadingAccounts = false;
+            }
+        },
+
+        toggleAccount(accountId) {
+            const index = this.selectedAccountIds.indexOf(accountId);
+            if (index > -1) {
+                this.selectedAccountIds.splice(index, 1);
+            } else {
+                this.selectedAccountIds.push(accountId);
+            }
+        },
+
+        async saveAccountSelection() {
+            if (!this.activeChatbot?.id) return;
+            this.savingAccount = true;
+
+            try {
+                const formData = new FormData();
+                this.selectedAccountIds.forEach(id => {
+                    formData.append('connected_account_ids[]', id);
+                });
+                formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+
+                console.log('Sending connected_account_ids:', this.selectedAccountIds);
+                console.log('FormData entries:', Array.from(formData.entries()));
+
+                const res = await fetch(`{{ route('api.v2.chatbot.ext.connected-account.update', ['chatbotId' => 'PLACEHOLDER']) }}`.replace('PLACEHOLDER', this.activeChatbot.id), {
+                    method: 'PUT',
+                    headers: { 
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    },
+                    body: formData,
+                });
+                const data = await res.json();
+                console.log('API response:', data);
+                if (data.status === 'success') {
+                    this.activeChatbot.connected_account_ids = data.data.connected_account_ids;
+                    toastr.success(data.message || '{{ __('Account selection saved.') }}');
+                } else {
+                    toastr.error(data.message || '{{ __('Failed to save account selection.') }}');
+                }
+            } catch (e) {
+                console.error('Save error:', e);
+                toastr.error('{{ __('An error occurred.') }}');
+            } finally {
+                this.savingAccount = false;
+            }
+        }
+    }"
     x-show="editingStep === 5"
     x-cloak
 >
@@ -99,118 +202,3 @@
         </div>
     </div>
 </div>
-
-@push('script')
-<script>
-(() => {
-    document.addEventListener('alpine:init', () => {
-        // Register component globally as a store for better accessibility
-        Alpine.store('connectedAccountSelector', () => ({
-            accounts: [],
-            loadingAccounts: false,
-            selectedAccountIds: [],
-            searchQuery: '',
-            savingAccount: false,
-
-            get filteredAccounts() {
-                if (!this.searchQuery) return this.accounts;
-                const query = this.searchQuery.toLowerCase();
-                return this.accounts.filter(account => 
-                    account.account_name?.toLowerCase().includes(query) ||
-                    account.account_username?.toLowerCase().includes(query) ||
-                    account.platform_label?.toLowerCase().includes(query)
-                );
-            },
-
-            init() {
-                this.$watch('editingStep', step => {
-                    if (step === 5) this.fetchAccounts();
-                });
-                this.$watch('activeChatbot', chatbot => {
-                    if (chatbot?.id) {
-                        // Initialize from chatbot's connected_account_ids if available
-                        if (chatbot.connected_account_ids && Array.isArray(chatbot.connected_account_ids)) {
-                            this.selectedAccountIds = chatbot.connected_account_ids;
-                        } else {
-                            this.selectedAccountIds = [];
-                        }
-                    }
-                });
-            },
-
-            async fetchAccounts() {
-                this.loadingAccounts = true;
-                try {
-                    const res = await fetch('{{ route('dashboard.user.integrations.api.accounts') }}', {
-                        headers: { 'Accept': 'application/json' }
-                    });
-                    const data = await res.json();
-                    const platformLabels = {
-                        salla: 'Salla',
-                        instagram: 'Instagram',
-                        messenger: 'Messenger',
-                        whatsapp: 'WhatsApp',
-                        telegram: 'Telegram',
-                    };
-                    this.accounts = (data.data || []).map(a => ({
-                        ...a,
-                        platform_label: platformLabels[a.platform] || a.platform,
-                    }));
-                } catch (e) {
-                    console.error(e);
-                } finally {
-                    this.loadingAccounts = false;
-                }
-            },
-
-            toggleAccount(accountId) {
-                const index = this.selectedAccountIds.indexOf(accountId);
-                if (index > -1) {
-                    this.selectedAccountIds.splice(index, 1);
-                } else {
-                    this.selectedAccountIds.push(accountId);
-                }
-            },
-
-            async saveAccountSelection() {
-                if (!this.activeChatbot?.id) return;
-                this.savingAccount = true;
-
-                try {
-                    const formData = new FormData();
-                    this.selectedAccountIds.forEach(id => {
-                        formData.append('connected_account_ids[]', id);
-                    });
-                    formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
-
-                    console.log('Sending connected_account_ids:', this.selectedAccountIds);
-                    console.log('FormData entries:', Array.from(formData.entries()));
-
-                    const res = await fetch(`{{ route('api.v2.chatbot.ext.connected-account.update', ['chatbotId' => 'PLACEHOLDER']) }}`.replace('PLACEHOLDER', this.activeChatbot.id), {
-                        method: 'PUT',
-                        headers: { 
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                        },
-                        body: formData,
-                    });
-                    const data = await res.json();
-                    console.log('API response:', data);
-                    if (data.status === 'success') {
-                        this.activeChatbot.connected_account_ids = data.data.connected_account_ids;
-                        toastr.success(data.message || '{{ __('Account selection saved.') }}');
-                    } else {
-                        toastr.error(data.message || '{{ __('Failed to save account selection.') }}');
-                    }
-                } catch (e) {
-                    console.error('Save error:', e);
-                    toastr.error('{{ __('An error occurred.') }}');
-                } finally {
-                    this.savingAccount = false;
-                }
-            }
-        }));
-    });
-})();
-</script>
-@endpush
