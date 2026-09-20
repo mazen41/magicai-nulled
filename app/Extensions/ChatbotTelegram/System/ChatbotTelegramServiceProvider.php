@@ -64,6 +64,9 @@ class ChatbotTelegramServiceProvider extends ServiceProvider
                 'prefix'         => 'api/v2/chatbot',
                 'as'             => 'api.v2.chatbot.channel.',
             ], function (Router $router) {
+                // Global webhook via ConnectedAccount
+                $router->post('webhook/telegram', [ChatbotTelegramWebhookController::class, 'handleGlobal'])->name('telegram.global');
+                // Legacy channel-based webhook
                 $router->any('{chatbotId}/channel/{channelId}/telegram', [ChatbotTelegramWebhookController::class, 'handle'])->name('telegram.post.handle');
             })
             ->group([

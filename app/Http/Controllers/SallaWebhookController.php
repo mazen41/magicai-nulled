@@ -19,15 +19,6 @@ class SallaWebhookController extends Controller
         // Get raw request body for signature verification
         $rawPayload = $request->getContent();
 
-        // Verify signature
-        if (! $this->verifySignature($request, $rawPayload)) {
-            Log::warning('Salla webhook signature verification failed', [
-                'security_strategy' => $request->header('X-Salla-Security-Strategy'),
-            ]);
-
-            return response()->json(['error' => 'Invalid signature'], 401);
-        }
-
         // Parse payload
         $payload = $request->json()->all();
 
@@ -41,9 +32,19 @@ class SallaWebhookController extends Controller
             return response()->json(['error' => 'Invalid payload structure'], 400);
         }
 
-        // Identify Salla connection by merchant ID
+        // Identify Salla connection by merchant ID FIRST
         $merchantId = $payload['merchant'];
         $connection = SallaConnection::where('salla_store_id', $merchantId)->first();
+
+        // Verify signature with per-connection secret
+        if (! $this->verifySignature($request, $rawPayload, $connection)) {
+            Log::warning('Salla webhook signature verification failed', [
+                'merchant_id' => $merchantId,
+                'security_strategy' => $request->header('X-Salla-Security-Strategy'),
+            ]);
+
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
 
         // Calculate payload hash for idempotency
         $payloadHash = hash('sha256', $rawPayload);
@@ -109,7 +110,7 @@ class SallaWebhookController extends Controller
     /**
      * Verify webhook signature
      */
-    private function verifySignature(Request $request, string $rawPayload): bool
+    private function verifySignature(Request $request, string $rawPayload, ?SallaConnection $connection = null): bool
     {
         $securityStrategy = $request->header('X-Salla-Security-Strategy');
 
@@ -130,9 +131,8 @@ class SallaWebhookController extends Controller
             return false;
         }
 
-        // For now, use the global webhook secret from config
-        // In the future, this should use the connection-specific secret
-        $secret = config('salla.webhook_secret');
+        // Prefer per-connection secret, fall back to global config
+        $secret = $connection?->webhook_secret ?? config('salla.webhook_secret');
 
         if (! $secret) {
             Log::error('Salla webhook secret not configured');

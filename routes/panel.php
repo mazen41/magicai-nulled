@@ -151,6 +151,45 @@ Route::middleware(['auth', 'updateUserActivity'])
 
                 Route::resource('integration', IntegrationController::class)->only(['index', 'edit', 'update']);
 
+                // Unified Integrations Hub
+                Route::group([
+                    'as'     => 'integrations.',
+                    'prefix' => 'integrations',
+                ], function () {
+                    Route::get('/', [\App\Http\Controllers\Integration\UnifiedIntegrationController::class, 'index'])
+                        ->name('index');
+
+                    Route::delete('/{account}/disconnect', [\App\Http\Controllers\Integration\UnifiedIntegrationController::class, 'disconnect'])
+                        ->name('disconnect');
+
+                    Route::get('/api/accounts', [\App\Http\Controllers\Integration\UnifiedIntegrationController::class, 'apiList'])
+                        ->name('api.accounts');
+
+                    // Instagram OAuth (standalone — saves to connected_accounts)
+                    Route::prefix('instagram')->as('instagram.')->group(function () {
+                        Route::get('connect', [\App\Http\Controllers\Integration\InstagramOAuthController::class, 'redirect'])
+                            ->name('connect');
+                        Route::get('callback', [\App\Http\Controllers\Integration\InstagramOAuthController::class, 'callback'])
+                            ->name('callback');
+                    });
+
+                    // Messenger OAuth
+                    Route::prefix('messenger')->as('messenger.')->group(function () {
+                        Route::get('connect', [\App\Http\Controllers\Integration\MessengerOAuthController::class, 'redirect'])
+                            ->name('connect');
+                        Route::get('callback', [\App\Http\Controllers\Integration\MessengerOAuthController::class, 'callback'])
+                            ->name('callback');
+                    });
+
+                    // Telegram OAuth (bot token)
+                    Route::post('telegram/connect', [\App\Http\Controllers\Integration\TelegramOAuthController::class, 'connect'])
+                        ->name('telegram.connect');
+
+                    // WhatsApp (Twilio) connection
+                    Route::post('whatsapp/connect', [\App\Http\Controllers\Integration\WhatsAppOAuthController::class, 'connect'])
+                        ->name('whatsapp.connect');
+                });
+
                 // Salla OAuth
                 Route::group([
                     'as'         => 'salla.',

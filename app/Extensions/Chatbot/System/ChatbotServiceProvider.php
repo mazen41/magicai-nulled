@@ -6,6 +6,7 @@ namespace App\Extensions\Chatbot\System;
 
 use App\Domains\Marketplace\Contracts\ExtensionRegisterKeyProviderInterface;
 use App\Extensions\Chatbot\System\Http\Controllers\Api\ChatbotApplicationController;
+use App\Extensions\Chatbot\System\Http\Controllers\Api\ChatbotConnectedAccountController;
 use App\Extensions\Chatbot\System\Http\Controllers\Api\ChatbotFrameController;
 use App\Extensions\Chatbot\System\Http\Controllers\AvatarController;
 use App\Extensions\Chatbot\System\Http\Controllers\ChatbotAnalyticsController;
@@ -171,6 +172,11 @@ class ChatbotServiceProvider extends ServiceProvider implements ExtensionRegiste
                         Route::any('', 'index')->name('index');
                         Route::POST('delete', 'delete')->name('delete');
                     });
+
+                // Connected Account API
+                $route->post('api/v2/chatbot/ext/{chatbotId}/connected-account',
+                    [\App\Extensions\Chatbot\System\Http\Controllers\Api\ChatbotConnectedAccountController::class, 'update']
+                )->name('api.v2.chatbot.ext.connected-account.update');
                 $route->group([
                     'prefix'         => 'dashboard/chatbot',
                     'as'             => 'dashboard.chatbot.',

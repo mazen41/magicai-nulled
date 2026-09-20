@@ -117,36 +117,105 @@ class ChatbotInstagramWebhookController extends Controller
 
     /**
      * Verify X-Hub-Signature-256 HMAC on POST requests.
-     * Returns true if signature is valid or if no app secret is configured (graceful degradation).
+     * Rejects webhook if app secret is not configured (security requirement).
      */
     protected function verifySignature(Request $request): bool
     {
         $appSecret = setting('INSTAGRAM_APP_SECRET');
 
         if (! $appSecret) {
-            return true;
+            Log::error('Instagram webhook rejected: INSTAGRAM_APP_SECRET not configured');
+            return false;
         }
 
         $signature = $request->header('X-Hub-Signature-256');
 
         if (! $signature) {
+            Log::warning('Instagram webhook rejected: X-Hub-Signature-256 header missing');
             return false;
         }
 
         $expectedHash = 'sha256=' . hash_hmac('sha256', $request->getContent(), $appSecret);
 
-        return hash_equals($expectedHash, $signature);
+        $isValid = hash_equals($expectedHash, $signature);
+        
+        if (!$isValid) {
+            Log::warning('Instagram webhook rejected: signature verification failed');
+        }
+        
+        return $isValid;
     }
 
     /**
      * Find the ChatbotChannel matching the Instagram Business Account ID from the payload.
+     * First checks existing channel-based lookup (backward compatibility),
+     * then falls back to connected_accounts → ext_chatbots lookup.
+     * 
+     * IMPORTANT: Does NOT auto-create channels with plaintext credentials.
+     * ConnectedAccount is the credential source.
      */
     protected function resolveChannelByInstagramId(string $instagramId): ?ChatbotChannel
     {
-        return ChatbotChannel::query()
+        // First: existing channel-based lookup (backward compatibility)
+        $channel = ChatbotChannel::query()
             ->where('channel', 'instagram')
             ->whereJsonContains('credentials->instagram_id', $instagramId)
             ->first();
+
+        if ($channel) return $channel;
+
+        // Second: new connected_accounts → ext_chatbots lookup
+        $account = \App\Models\ConnectedAccount::query()
+            ->where('platform', 'instagram')
+            ->where('account_identifier', $instagramId)
+            ->where('connection_status', 'connected')
+            ->first();
+
+        if (!$account) return null;
+
+        $chatbots = \App\Extensions\Chatbot\System\Models\Chatbot::query()
+            ->where('connected_account_id', $account->id)
+            ->where('active', true)
+            ->get();
+
+        if ($chatbots->isEmpty()) return null;
+
+        // Multi-chatbot routing strategy:
+        // If multiple chatbots are attached to the same account, use the most recently updated active chatbot
+        // This provides deterministic routing while supporting multiple chatbots per account
+        if ($chatbots->count() > 1) {
+            Log::info('Multiple chatbots for Instagram account', [
+                'instagram_id' => $instagramId,
+                'chatbot_count' => $chatbots->count(),
+                'selected_chatbot_id' => $chatbots->sortByDesc('updated_at')->first()->id,
+            ]);
+        }
+        
+        $chatbot = $chatbots->sortByDesc('updated_at')->first();
+
+        if (!$chatbot) return null;
+
+        // Create minimal compatibility channel WITHOUT plaintext credentials
+        // The actual credentials come from ConnectedAccount
+        $channel = ChatbotChannel::query()
+            ->where('chatbot_id', $chatbot->id)
+            ->where('channel', 'instagram')
+            ->first();
+
+        if (!$channel) {
+            $channel = ChatbotChannel::create([
+                'user_id'      => $chatbot->user_id,
+                'chatbot_id'   => $chatbot->id,
+                'channel'      => 'instagram',
+                'credentials'  => [
+                    'instagram_id' => $instagramId,
+                    'connected_account_id' => $account->id, // Reference to credential source
+                ],
+                'connected_at' => now(),
+            ]);
+        }
+
+        return $channel;
     }
 
     /**

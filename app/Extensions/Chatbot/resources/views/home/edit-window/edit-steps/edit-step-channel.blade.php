@@ -1,3 +1,135 @@
+{{-- Connected Account Selector --}}
+<div
+    class="col-start-1 col-end-1 row-start-1 row-end-1 transition-all mb-8"
+    x-data="connectedAccountSelector"
+    x-show="editingStep === 5"
+>
+    <h3 class="mb-2 text-base font-semibold">@lang('Platform Account')</h3>
+    <p class="mb-4 text-xs text-heading-foreground/60">
+        @lang('Select a connected account to link this chatbot to a messaging platform.')
+        <a href="{{ route('dashboard.user.integrations.index') }}" class="text-primary underline">
+            @lang('Manage accounts')
+        </a>
+    </p>
+
+    <div class="flex items-center gap-3">
+        <select
+            class="lqd-input w-full max-w-sm"
+            x-model="selectedAccountId"
+            @change="saveAccountSelection()"
+        >
+            <option value="">@lang('— No platform account —')</option>
+            <template x-for="account in accounts" :key="account.id">
+                <option
+                    :value="account.id"
+                    :selected="account.id == activeChatbot.connected_account_id"
+                    x-text="account.platform_label + ' — ' + account.account_name"
+                ></option>
+            </template>
+        </select>
+
+        <template x-if="savingAccount">
+            <span class="text-xs text-heading-foreground/60">@lang('Saving...')</span>
+        </template>
+        <template x-if="!savingAccount && savedAccount">
+            <span class="text-xs text-green-600">@lang('Saved')</span>
+        </template>
+    </div>
+
+    <template x-if="accounts.length === 0 && !loadingAccounts">
+        <p class="mt-3 text-xs text-orange-600">
+            @lang('No connected accounts found.')
+            <a href="{{ route('dashboard.user.integrations.index') }}" class="underline">
+                @lang('Connect a platform account first.')
+            </a>
+        </p>
+    </template>
+</div>
+
+@push('script')
+<script>
+(() => {
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('connectedAccountSelector', () => ({
+            accounts: [],
+            loadingAccounts: false,
+            selectedAccountId: '',
+            savingAccount: false,
+            savedAccount: false,
+
+            init() {
+                this.$watch('editingStep', step => {
+                    if (step === 5) this.fetchAccounts();
+                });
+                this.$watch('activeChatbot', chatbot => {
+                    if (chatbot?.id) {
+                        this.selectedAccountId = chatbot.connected_account_id ?? '';
+                    }
+                });
+            },
+
+            async fetchAccounts() {
+                this.loadingAccounts = true;
+                try {
+                    const res = await fetch('{{ route('dashboard.user.integrations.api.accounts') }}', {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const data = await res.json();
+                    const platformLabels = {
+                        salla: 'Salla',
+                        instagram: 'Instagram',
+                        messenger: 'Messenger',
+                        whatsapp: 'WhatsApp',
+                        telegram: 'Telegram',
+                    };
+                    this.accounts = (data.data || []).map(a => ({
+                        ...a,
+                        platform_label: platformLabels[a.platform] || a.platform,
+                    }));
+                    this.selectedAccountId = this.activeChatbot?.connected_account_id ?? '';
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    this.loadingAccounts = false;
+                }
+            },
+
+            async saveAccountSelection() {
+                if (!this.activeChatbot?.id) return;
+                this.savingAccount = true;
+                this.savedAccount = false;
+
+                try {
+                    const formData = new FormData();
+                    formData.append('connected_account_id', this.selectedAccountId ?? '');
+                    formData.append('_method', 'PUT');
+                    formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+
+                    const res = await fetch(`{{ route('api.v2.chatbot.ext.connected-account.update', ['chatbotId' => 'PLACEHOLDER']) }}`.replace('PLACEHOLDER', this.activeChatbot.id), {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' },
+                        body: formData,
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        this.activeChatbot.connected_account_id = this.selectedAccountId || null;
+                        this.savedAccount = true;
+                        setTimeout(() => this.savedAccount = false, 3000);
+                    } else {
+                        toastr.error(data.message || '{{ __('Failed to save account selection.') }}');
+                    }
+                } catch (e) {
+                    toastr.error('{{ __('An error occurred.') }}');
+                } finally {
+                    this.savingAccount = false;
+                }
+            }
+        }));
+    });
+})();
+</script>
+@endpush
+
 @if (\App\Extensions\Chatbot\System\Helpers\ChatbotHelper::existChannels())
 	@php
 		$allowedChatbotChannels = \App\Extensions\Chatbot\System\Helpers\ChatbotHelper::allowedChannelKeys();

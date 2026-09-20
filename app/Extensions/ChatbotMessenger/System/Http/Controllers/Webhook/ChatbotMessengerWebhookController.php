@@ -7,6 +7,7 @@ use App\Extensions\Chatbot\System\Models\ChatbotChannelWebhook;
 use App\Extensions\ChatbotMessenger\System\Services\MessengerConversationService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ChatbotMessengerWebhookController extends Controller
 {
@@ -14,11 +15,87 @@ class ChatbotMessengerWebhookController extends Controller
         public MessengerConversationService $service
     ) {}
 
+    /**
+     * Global webhook handler that routes via ConnectedAccount
+     * Fallback to legacy channel-based routing for backward compatibility
+     */
+    public function handleGlobal(Request $request)
+    {
+        $pageId = data_get($request->input('entry.0'), 'id');
+
+        if (!$pageId) {
+            Log::warning('Messenger webhook missing page ID');
+            return response('Bad Request', 400);
+        }
+
+        // First: try ConnectedAccount routing
+        $account = \App\Models\ConnectedAccount::query()
+            ->where('platform', 'messenger')
+            ->where('account_identifier', $pageId)
+            ->where('connection_status', 'connected')
+            ->first();
+
+        if ($account) {
+            // Find active chatbots for this account
+            $chatbots = \App\Extensions\Chatbot\System\Models\Chatbot::query()
+                ->where('connected_account_id', $account->id)
+                ->where('active', true)
+                ->get();
+
+            if (!$chatbots->isEmpty()) {
+                // Multi-chatbot routing: use most recently updated
+                if ($chatbots->count() > 1) {
+                    Log::info('Multiple chatbots for Messenger page', [
+                        'page_id' => $pageId,
+                        'chatbot_count' => $chatbots->count(),
+                        'selected_chatbot_id' => $chatbots->sortByDesc('updated_at')->first()->id,
+                    ]);
+                }
+                
+                $chatbot = $chatbots->sortByDesc('updated_at')->first();
+
+                // Create or find channel
+                $channel = ChatbotChannel::query()
+                    ->where('chatbot_id', $chatbot->id)
+                    ->where('channel', 'messenger')
+                    ->first();
+
+                if (!$channel) {
+                    $channel = ChatbotChannel::create([
+                        'user_id'      => $chatbot->user_id,
+                        'chatbot_id'   => $chatbot->id,
+                        'channel'      => 'messenger',
+                        'credentials'  => [
+                            'page_id' => $pageId,
+                            'connected_account_id' => $account->id,
+                        ],
+                        'connected_at' => now(),
+                    ]);
+                }
+
+                return $this->processWebhook($chatbot->id, $channel->id, $request);
+            }
+        }
+
+        // Fallback: verify with global app secret for existing channels
+        $this->verifyWebhook(setting('INSTAGRAM_APP_SECRET') ?? '');
+
+        return response('OK', 200);
+    }
+
+    /**
+     * Legacy channel-based webhook handler (backward compatibility)
+     */
     public function handle(
         int $chatbotId,
         int $channelId,
         Request $request
     ) {
+        return $this->processWebhook($chatbotId, $channelId, $request);
+    }
+
+    private function processWebhook(int $chatbotId, int $channelId, Request $request)
+    {
         $channel = ChatbotChannel::query()->findOrFail($channelId);
 
         ChatbotChannelWebhook::query()->create([
@@ -31,7 +108,7 @@ class ChatbotMessengerWebhookController extends Controller
         $this->verifyWebhook(data_get($channel['credentials'], 'verify_token', ''));
 
         if (! $request->input('entry.0.messaging.0')) {
-            return;
+            return response('OK', 200);
         }
 
         $this->service
@@ -55,6 +132,8 @@ class ChatbotMessengerWebhookController extends Controller
         );
 
         $this->service->handle();
+
+        return response('OK', 200);
     }
 
     private function verifyWebhook($verifyToken): void

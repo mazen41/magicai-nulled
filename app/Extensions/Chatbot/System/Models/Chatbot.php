@@ -20,6 +20,7 @@ class Chatbot extends Model
     protected $fillable = [
         'uuid',
         'user_id',
+        'connected_account_id',
         'interaction_type',
         'title',
         'bubble_message',
@@ -115,6 +116,7 @@ class Chatbot extends Model
         'pre_defined_questions'              => 'array',
         'active'                             => 'boolean',
         'user_id'                            => 'integer',
+        'connected_account_id'              => 'integer',
         'is_demo'                            => 'boolean',
         'human_agent_conditions'             => 'json',
         'voice_call_enabled'                 => 'boolean',
@@ -175,5 +177,10 @@ class Chatbot extends Model
                 DB::raw('"#" as link'),
             ])
             ->get();
+    }
+
+    public function connectedAccount(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\ConnectedAccount::class, 'connected_account_id');
     }
 }
