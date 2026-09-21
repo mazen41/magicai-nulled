@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Salla;
 
 use App\Models\Chatbot\Chatbot;
+use App\Models\ConnectedAccount;
 use App\Models\SallaConnection;
 use App\Models\SallaOrder;
 use Illuminate\Support\Facades\Log;
@@ -55,17 +56,78 @@ class SallaOrderToolService
     }
 
     /**
+     * Resolve the SallaConnection for a chatbot.
+     *
+     * Resolution order:
+     *   1. New path  — chatbot_connected_accounts pivot → ConnectedAccount (platform=salla)
+     *                  → SallaConnection via metadata['salla_connection_id']
+     *   2. Legacy    — chatbot.salla_connection_id direct FK
+     *
+     * Returns null when neither path yields a usable connection.
+     */
+    private function resolveSallaConnection(Chatbot $chatbot): ?SallaConnection
+    {
+        // ── Path 1: ConnectedAccount pivot (new architecture) ──────────────────
+        // The chatbot may be an ext_chatbot with a connectedAccounts() BelongsToMany.
+        // Guard with method_exists to stay compatible if this relationship is absent.
+        if (method_exists($chatbot, 'connectedAccounts')) {
+            /** @var ConnectedAccount|null $account */
+            $account = $chatbot->connectedAccounts()
+                ->where('platform', 'salla')
+                ->where('connection_status', 'connected')
+                ->first();
+
+            if ($account) {
+                $sallaConnectionId = $account->metadata['salla_connection_id'] ?? null;
+
+                if ($sallaConnectionId) {
+                    $connection = SallaConnection::find($sallaConnectionId);
+
+                    if ($connection) {
+                        Log::debug('[SallaOrderTool] Resolved via ConnectedAccount pivot', [
+                            'chatbot_id'         => $chatbot->id,
+                            'connected_account'  => $account->id,
+                            'salla_connection_id' => $connection->id,
+                        ]);
+
+                        return $connection;
+                    }
+                }
+
+                // ConnectedAccount exists but no SallaConnection pointer — treat as misconfigured
+                Log::warning('[SallaOrderTool] ConnectedAccount found but no salla_connection_id in metadata', [
+                    'chatbot_id'        => $chatbot->id,
+                    'connected_account' => $account->id,
+                    'metadata'          => $account->metadata,
+                ]);
+            }
+        }
+
+        // ── Path 2: Legacy direct FK (salla_connection_id on chatbot table) ───
+        $connection = $chatbot->sallaConnection ?? null;
+
+        if ($connection) {
+            Log::debug('[SallaOrderTool] Resolved via legacy salla_connection_id FK', [
+                'chatbot_id'          => $chatbot->id,
+                'salla_connection_id' => $connection->id,
+            ]);
+        }
+
+        return $connection ?: null;
+    }
+
+    /**
      * Handle Salla order status lookup.
      *
      * @param  array<string, mixed>  $functionArgs
      */
     private function handleSallaOrderStatus(Chatbot $chatbot, array $functionArgs): ?string
     {
-        // Get Salla connection from chatbot
-        $connection = $chatbot->sallaConnection;
+        // Resolve SallaConnection via new pivot or legacy FK
+        $connection = $this->resolveSallaConnection($chatbot);
 
         if (! $connection) {
-            Log::info('[SallaOrderTool] Chatbot has no Salla connection', [
+            Log::info('[SallaOrderTool] Chatbot has no Salla connection (checked both paths)', [
                 'chatbot_id' => $chatbot->id,
             ]);
 
@@ -78,8 +140,8 @@ class SallaOrderToolService
         // Verify connection ownership
         if ($connection->user_id !== $chatbot->user_id) {
             Log::warning('[SallaOrderTool] Connection ownership mismatch', [
-                'chatbot_id' => $chatbot->id,
-                'chatbot_user_id' => $chatbot->user_id,
+                'chatbot_id'         => $chatbot->id,
+                'chatbot_user_id'    => $chatbot->user_id,
                 'connection_user_id' => $connection->user_id,
             ]);
 
@@ -140,13 +202,34 @@ class SallaOrderToolService
     }
 
     /**
+     * Return true when this chatbot has a usable Salla connection via either path.
+     */
+    private function hasSallaConnection(Chatbot $chatbot): bool
+    {
+        // Legacy direct FK
+        if (! empty($chatbot->salla_connection_id)) {
+            return true;
+        }
+
+        // New ConnectedAccount pivot
+        if (method_exists($chatbot, 'connectedAccounts')) {
+            return $chatbot->connectedAccounts()
+                ->where('platform', 'salla')
+                ->where('connection_status', 'connected')
+                ->exists();
+        }
+
+        return false;
+    }
+
+    /**
      * OpenAI tool definitions format.
      *
      * @return array<int, array<string, mixed>>
      */
     public function getToolDefinitions(Chatbot $chatbot): array
     {
-        if (! $chatbot->salla_connection_id) {
+        if (! $this->hasSallaConnection($chatbot)) {
             return [];
         }
 
@@ -165,7 +248,7 @@ class SallaOrderToolService
      */
     public function getAnthropicToolDefinitions(Chatbot $chatbot): array
     {
-        if (! $chatbot->salla_connection_id) {
+        if (! $this->hasSallaConnection($chatbot)) {
             return [];
         }
 
@@ -182,7 +265,7 @@ class SallaOrderToolService
      */
     public function getGeminiToolDefinitions(Chatbot $chatbot): array
     {
-        if (! $chatbot->salla_connection_id) {
+        if (! $this->hasSallaConnection($chatbot)) {
             return [];
         }
 

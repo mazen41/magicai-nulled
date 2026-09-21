@@ -129,4 +129,13 @@ return [
     'midtrans' => [
         'class' => MidtransService::class,
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Meta (Facebook / WhatsApp Cloud API)
+    |--------------------------------------------------------------------------
+    */
+    'meta' => [
+        'graph_version' => env('META_GRAPH_VERSION', 'v18.0'),
+    ],
 ];

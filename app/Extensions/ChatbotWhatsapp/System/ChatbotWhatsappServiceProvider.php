@@ -6,6 +6,8 @@ namespace App\Extensions\ChatbotWhatsapp\System;
 
 use App\Extensions\ChatbotWhatsapp\System\Http\Controllers\ChatbotWhatsappController;
 use App\Extensions\ChatbotWhatsapp\System\Http\Controllers\Webhook\ChatbotTwilioController;
+use App\Extensions\ChatbotWhatsapp\System\Http\Controllers\Webhook\ChatbotWhatsAppCloudWebhookController;
+use App\Http\Controllers\Integration\WhatsAppCloudOAuthController;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Route;
@@ -76,19 +78,32 @@ class ChatbotWhatsappServiceProvider extends ServiceProvider
     {
         $this->router()
             ->group([
-                'middleware'     => 'api',
-                'prefix'         => 'api/v2/chatbot',
-                'as'             => 'api.v2.chatbot.channel.',
+                'middleware' => 'api',
+                'prefix'     => 'api/v2/chatbot',
+                'as'         => 'api.v2.chatbot.channel.',
             ], function (Router $router) {
+                // Legacy Twilio webhook (preserved)
                 $router->any('{chatbotId}/channel/{channelId}/twilio', [ChatbotTwilioController::class, 'handle'])->name('twilio.post.handle');
+
+                // Meta WhatsApp Cloud API webhook (GET = verify, POST = events)
+                $router->match(['get', 'post'], 'webhook/whatsapp', [ChatbotWhatsAppCloudWebhookController::class, 'handleGlobal'])->name('whatsapp.cloud.global');
             })->group([
                 'middleware' => ['web', 'auth'],
             ], function (Router $router) {
+                // Legacy Twilio channel store
                 $router->controller(ChatbotWhatsappController::class)
                     ->name('dashboard.chatbot-multi-channel.whatsapp.')
                     ->prefix('dashboard/chatbot-multi-channel/whatsapp')
                     ->group(function (Router $router) {
                         $router->post('store', 'store')->name('store');
+                    });
+
+                // WhatsApp Cloud API connect form + store
+                $router->prefix('dashboard/user/integrations/whatsapp-cloud')
+                    ->as('dashboard.user.integrations.whatsapp-cloud.')
+                    ->group(function (Router $router) {
+                        $router->get('connect', [WhatsAppCloudOAuthController::class, 'connect'])->name('connect');
+                        $router->post('store', [WhatsAppCloudOAuthController::class, 'store'])->name('store');
                     });
             });
 

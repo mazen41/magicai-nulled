@@ -64,11 +64,20 @@ class UnifiedIntegrationController extends Controller
             $query->where('platform', $platform);
         }
 
+        $platformLabels = [
+            'salla'           => 'Salla',
+            'instagram'       => 'Instagram',
+            'messenger'       => 'Facebook Messenger',
+            'telegram'        => 'Telegram',
+            'whatsapp_cloud'  => 'WhatsApp Business',
+        ];
+
         return response()->json([
             'status' => 'success',
             'data'   => $query->orderByDesc('connected_at')->get()->map(fn ($a) => [
                 'id'                 => $a->id,
                 'platform'           => $a->platform,
+                'platform_label'     => $platformLabels[$a->platform] ?? ucfirst(str_replace('_', ' ', $a->platform)),
                 'account_identifier' => $a->account_identifier,
                 'account_name'       => $a->getDisplayName(),
                 'account_username'   => $a->account_username,
@@ -108,6 +117,15 @@ class UnifiedIntegrationController extends Controller
                 'oauth'        => true,
                 'enabled'      => \App\Helpers\Classes\MarketplaceHelper::isRegistered('chatbot-messenger'),
                 'description'  => 'Connect Facebook Pages to handle Messenger conversations.',
+            ],
+            'whatsapp_cloud' => [
+                'name'         => 'WhatsApp Business (Cloud API)',
+                'icon'         => 'whatsapp.svg',
+                'connect_route' => 'dashboard.user.integrations.whatsapp-cloud.connect',
+                'connect_url'  => route('dashboard.user.integrations.whatsapp-cloud.connect'),
+                'oauth'        => false,
+                'enabled'      => \App\Helpers\Classes\MarketplaceHelper::isRegistered('chatbot-whatsapp'),
+                'description'  => 'Connect WhatsApp Business via Meta Cloud API to receive and reply to messages.',
             ],
         ];
     }

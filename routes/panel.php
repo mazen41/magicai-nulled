@@ -180,6 +180,14 @@ Route::middleware(['auth', 'updateUserActivity'])
                         Route::get('callback', [\App\Http\Controllers\Integration\MessengerOAuthController::class, 'callback'])
                             ->name('callback');
                     });
+
+                    // WhatsApp Business Cloud API (manual credentials — not OAuth)
+                    Route::prefix('whatsapp-cloud')->as('whatsapp-cloud.')->group(function () {
+                        Route::get('connect', [\App\Http\Controllers\Integration\WhatsAppCloudOAuthController::class, 'connect'])
+                            ->name('connect');
+                        Route::post('store', [\App\Http\Controllers\Integration\WhatsAppCloudOAuthController::class, 'store'])
+                            ->name('store');
+                    });
                 });
 
                 // Salla OAuth
