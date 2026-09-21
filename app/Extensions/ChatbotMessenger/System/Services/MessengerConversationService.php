@@ -38,32 +38,54 @@ class MessengerConversationService
 
     public function handle(): void
     {
-        $messenger = app(MessengerService::class)
-            ->setChatbotChannel(ChatbotChannel::find($this->channelId));
+        $chatbotChannel = ChatbotChannel::find($this->channelId);
 
-        $recipient = data_get($this->payload, 'sender.id');
+        if (!$chatbotChannel) {
+            Log::error('MessengerConversationService::handle — ChatbotChannel not found', [
+                'channel_id' => $this->channelId,
+            ]);
+            return;
+        }
+
+        $messenger = app(MessengerService::class)->setChatbotChannel($chatbotChannel);
+
+        $recipient   = data_get($this->payload, 'sender.id');
         $messageType = data_get($this->payload, 'MessageType') ?: 'text';
         $messageBody = data_get($this->payload, 'message.text');
 
+        Log::info('MessengerConversationService::handle', [
+            'chatbot_id'      => $this->chatbotId,
+            'channel_id'      => $this->channelId,
+            'recipient'       => $recipient,
+            'message_type'    => $messageType,
+            'has_message_body' => !empty($messageBody),
+        ]);
+
         $conversation = $this->conversation;
-        $chatbot = $conversation->chatbot;
+        $chatbot      = $conversation->chatbot;
 
         if ($conversation->connect_agent_at) {
             if ($conversation->last_activity_at->diffInMinutes() > 10) {
                 $this->closeInactiveConversation($conversation, $messenger, $recipient);
-
-                return;
             }
-
+            // Conversation is in human-agent mode; do not auto-reply
             return;
         }
 
         $conversation->update(['last_activity_at' => now()]);
 
-        if ($messageType === 'text' && is_string($messageBody)) {
-            $this->processTextMessage($messageBody, $conversation, $chatbot, $messenger, $recipient);
-        } else {
-            $this->sendUnsupportedMessageType($conversation, $chatbot, $messenger, $recipient);
+        try {
+            if ($messageType === 'text' && is_string($messageBody)) {
+                $this->processTextMessage($messageBody, $conversation, $chatbot, $messenger, $recipient);
+            } else {
+                $this->sendUnsupportedMessageType($conversation, $chatbot, $messenger, $recipient);
+            }
+        } catch (\Throwable $e) {
+            Log::error('MessengerConversationService::handle — exception during processing', [
+                'chatbot_id' => $this->chatbotId,
+                'error'      => $e->getMessage(),
+                'trace'      => $e->getTraceAsString(),
+            ]);
         }
     }
 

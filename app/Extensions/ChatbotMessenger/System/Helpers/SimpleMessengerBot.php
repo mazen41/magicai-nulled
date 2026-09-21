@@ -15,6 +15,13 @@ class SimpleMessengerBot
     {
         $url = 'https://graph.facebook.com/v18.0/me/messages';
 
+        if (empty($this->pageAccessToken)) {
+            \Illuminate\Support\Facades\Log::error('SimpleMessengerBot: page access token is empty — cannot send reply', [
+                'recipient' => $userId,
+            ]);
+            return false;
+        }
+
         $data = [
             'recipient' => ['id' => $userId],
             'message'   => ['text' => $message],
@@ -35,9 +42,32 @@ class SimpleMessengerBot
 
         $response = curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($curl);
         curl_close($curl);
 
-        return $httpCode === 200;
+        if ($curlError) {
+            \Illuminate\Support\Facades\Log::error('SimpleMessengerBot: cURL error sending reply', [
+                'recipient'  => $userId,
+                'curl_error' => $curlError,
+            ]);
+            return false;
+        }
+
+        if ($httpCode !== 200) {
+            \Illuminate\Support\Facades\Log::error('SimpleMessengerBot: Graph API rejected reply', [
+                'recipient'   => $userId,
+                'http_status' => $httpCode,
+                'response'    => $response,
+                'token_hint'  => substr($this->pageAccessToken, 0, 8) . '...',
+            ]);
+            return false;
+        }
+
+        \Illuminate\Support\Facades\Log::info('SimpleMessengerBot: reply sent successfully', [
+            'recipient' => $userId,
+        ]);
+
+        return true;
     }
 
     public function verifyWebhook($verifyToken)
