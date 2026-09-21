@@ -110,9 +110,14 @@ class Chatbot extends Model
         'connected_account_ids',
     ];
 
-    public function getConnectedAccountIdsAttribute()
+    public function getConnectedAccountIdsAttribute(): array
     {
-        return $this->connectedAccounts->pluck('id')->toArray();
+        // Avoid N+1: only load the relation if it hasn't been loaded yet
+        if (!$this->relationLoaded('connectedAccounts')) {
+            $this->load('connectedAccounts');
+        }
+
+        return $this->connectedAccounts->pluck('id')->map(fn ($id) => (int) $id)->toArray();
     }
 
     protected $casts = [

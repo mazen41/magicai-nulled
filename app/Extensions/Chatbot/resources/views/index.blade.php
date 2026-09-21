@@ -185,6 +185,23 @@
                     reviewMaxResponses: 5,
                     reviewResponsesLimitMessage: '{{ __('You can add up to :count review responses.', ['count' => 5]) }}',
                     formErrors: {},
+
+                    // ── Channel / Connected-Accounts step (step 5) ──────────────────
+                    channelAccounts: [],
+                    channelLoadingAccounts: false,
+                    channelSelectedIds: [],
+                    channelSearchQuery: '',
+                    channelSaving: false,
+                    get channelFilteredAccounts() {
+                        if (!this.channelSearchQuery) return this.channelAccounts;
+                        const q = this.channelSearchQuery.toLowerCase();
+                        return this.channelAccounts.filter(a =>
+                            (a.account_name     || '').toLowerCase().includes(q) ||
+                            (a.account_username || '').toLowerCase().includes(q) ||
+                            (a.platform_label   || '').toLowerCase().includes(q)
+                        );
+                    },
+                    // ────────────────────────────────────────────────────────────────
                     contactInfo: {
                         activeTab: 'details',
                         editMode: false,
@@ -200,6 +217,29 @@
                         this.initFormErrors();
 
                         Alpine.store('externalChatbotEditor', this);
+
+                        // ── Channel step watchers ────────────────────────────────────
+                        // Watch editingStep: fetch accounts when the user arrives at step 5
+                        this.$watch('editingStep', (step) => {
+                            if (step === 5) {
+                                this.channelFetchAccounts();
+                            }
+                        });
+
+                        // Watch activeChatbot: sync selected IDs whenever a different
+                        // chatbot is opened (or the same one is refreshed after save).
+                        this.$watch('activeChatbot', (chatbot) => {
+                            if (chatbot && chatbot.id && chatbot.id !== 'new_chatbot') {
+                                const ids = Array.isArray(chatbot.connected_account_ids)
+                                    ? chatbot.connected_account_ids
+                                    : [];
+                                // normalise to integers so includes() matches API ids
+                                this.channelSelectedIds = ids.map(id => parseInt(id, 10));
+                            } else {
+                                this.channelSelectedIds = [];
+                            }
+                        });
+                        // ────────────────────────────────────────────────────────────
                     },
                     createNewChatObj() {
                         this.chatbots.data.unshift({
@@ -681,6 +721,89 @@
 
                         return formData;
                     },
+                    // ── Channel / Connected-Accounts methods ─────────────────────────
+                    async channelFetchAccounts() {
+                        if (this.channelLoadingAccounts) return;
+                        this.channelLoadingAccounts = true;
+                        const platformLabels = {
+                            salla: 'Salla', instagram: 'Instagram',
+                            messenger: 'Messenger', whatsapp: 'WhatsApp', telegram: 'Telegram',
+                        };
+                        try {
+                            const res = await fetch('{{ route('dashboard.user.integrations.api.accounts') }}', {
+                                headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                            });
+                            if (!res.ok) throw new Error('HTTP ' + res.status);
+                            const json = await res.json();
+                            this.channelAccounts = (json.data || []).map(a => ({
+                                ...a,
+                                id: parseInt(a.id, 10),
+                                platform_label: platformLabels[a.platform] || a.platform,
+                            }));
+                            // Re-sync selection with normalised integer ids
+                            if (this.activeChatbot && Array.isArray(this.activeChatbot.connected_account_ids)) {
+                                this.channelSelectedIds = this.activeChatbot.connected_account_ids.map(id => parseInt(id, 10));
+                            }
+                        } catch (e) {
+                            console.error('[Channel] fetchAccounts error:', e);
+                            toastr.error('{{ __('Failed to load connected accounts.') }}');
+                        } finally {
+                            this.channelLoadingAccounts = false;
+                        }
+                    },
+                    channelToggleAccount(accountId) {
+                        const id = parseInt(accountId, 10);
+                        const idx = this.channelSelectedIds.indexOf(id);
+                        if (idx > -1) {
+                            this.channelSelectedIds.splice(idx, 1);
+                        } else {
+                            this.channelSelectedIds.push(id);
+                        }
+                    },
+                    async channelSaveSelection() {
+                        if (!this.activeChatbot || !this.activeChatbot.id || this.activeChatbot.id === 'new_chatbot') {
+                            toastr.warning('{{ __('Please save the chatbot first before assigning accounts.') }}');
+                            return;
+                        }
+                        this.channelSaving = true;
+                        try {
+                            const url = '{{ route('api.v2.chatbot.ext.connected-account.update', ['chatbotId' => '__ID__']) }}'
+                                .replace('__ID__', this.activeChatbot.id);
+                            const res = await fetch(url, {
+                                method: 'PUT',
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                },
+                                body: JSON.stringify({
+                                    connected_account_ids: this.channelSelectedIds,
+                                }),
+                            });
+                            const json = await res.json();
+                            if (!res.ok || json.status !== 'success') {
+                                toastr.error(json.message || '{{ __('Failed to save account selection.') }}');
+                                return;
+                            }
+                            // Persist the new ids back onto activeChatbot so watchers stay in sync
+                            const savedIds = (json.data?.connected_account_ids || []).map(id => parseInt(id, 10));
+                            this.activeChatbot.connected_account_ids = savedIds;
+                            this.channelSelectedIds = savedIds;
+                            // Also update the chatbots list so the data is fresh after closing/reopening
+                            const idx = this.chatbots.data.findIndex(c => c.id === this.activeChatbot.id);
+                            if (idx > -1) {
+                                this.chatbots.data[idx].connected_account_ids = savedIds;
+                            }
+                            toastr.success(json.message || '{{ __('Account selection saved.') }}');
+                        } catch (e) {
+                            console.error('[Channel] saveSelection error:', e);
+                            toastr.error('{{ __('An error occurred while saving.') }}');
+                        } finally {
+                            this.channelSaving = false;
+                        }
+                    },
+                    // ────────────────────────────────────────────────────────────────
+
                     ensureChatbotsReviewPayload() {
                         if (!this.chatbots?.data) {
                             return;

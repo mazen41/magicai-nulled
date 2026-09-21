@@ -1,110 +1,8 @@
 {{-- Connected Accounts Multi-Selector --}}
+{{-- NOTE: No x-data here — this step inherits the parent externalChatbotEditor scope.       --}}
+{{-- Channel state (channelAccounts, channelSelectedIds, etc.) is initialised in index.blade --}}
 <div
     class="col-start-1 col-end-1 row-start-1 row-end-1 transition-all"
-    x-data="{
-        accounts: [],
-        loadingAccounts: false,
-        selectedAccountIds: [],
-        searchQuery: '',
-        savingAccount: false,
-
-        get filteredAccounts() {
-            if (!this.searchQuery) return this.accounts;
-            const query = this.searchQuery.toLowerCase();
-            return this.accounts.filter(account => 
-                account.account_name?.toLowerCase().includes(query) ||
-                account.account_username?.toLowerCase().includes(query) ||
-                account.platform_label?.toLowerCase().includes(query)
-            );
-        },
-
-        init() {
-            this.$watch('editingStep', step => {
-                if (step === 5) this.fetchAccounts();
-            });
-            this.$watch('activeChatbot', chatbot => {
-                if (chatbot?.id) {
-                    if (chatbot.connected_account_ids && Array.isArray(chatbot.connected_account_ids)) {
-                        this.selectedAccountIds = chatbot.connected_account_ids;
-                    } else {
-                        this.selectedAccountIds = [];
-                    }
-                }
-            });
-        },
-
-        async fetchAccounts() {
-            this.loadingAccounts = true;
-            try {
-                const res = await fetch('{{ route('dashboard.user.integrations.api.accounts') }}', {
-                    headers: { 'Accept': 'application/json' }
-                });
-                const data = await res.json();
-                const platformLabels = {
-                    salla: 'Salla',
-                    instagram: 'Instagram',
-                    messenger: 'Messenger',
-                    whatsapp: 'WhatsApp',
-                    telegram: 'Telegram',
-                };
-                this.accounts = (data.data || []).map(a => ({
-                    ...a,
-                    platform_label: platformLabels[a.platform] || a.platform,
-                }));
-            } catch (e) {
-                console.error(e);
-            } finally {
-                this.loadingAccounts = false;
-            }
-        },
-
-        toggleAccount(accountId) {
-            const index = this.selectedAccountIds.indexOf(accountId);
-            if (index > -1) {
-                this.selectedAccountIds.splice(index, 1);
-            } else {
-                this.selectedAccountIds.push(accountId);
-            }
-        },
-
-        async saveAccountSelection() {
-            if (!this.activeChatbot?.id) return;
-            this.savingAccount = true;
-
-            try {
-                const formData = new FormData();
-                this.selectedAccountIds.forEach(id => {
-                    formData.append('connected_account_ids[]', id);
-                });
-                formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
-
-                console.log('Sending connected_account_ids:', this.selectedAccountIds);
-                console.log('FormData entries:', Array.from(formData.entries()));
-
-                const res = await fetch(`{{ route('api.v2.chatbot.ext.connected-account.update', ['chatbotId' => 'PLACEHOLDER']) }}`.replace('PLACEHOLDER', this.activeChatbot.id), {
-                    method: 'PUT',
-                    headers: { 
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                    },
-                    body: formData,
-                });
-                const data = await res.json();
-                console.log('API response:', data);
-                if (data.status === 'success') {
-                    this.activeChatbot.connected_account_ids = data.data.connected_account_ids;
-                    toastr.success(data.message || '{{ __('Account selection saved.') }}');
-                } else {
-                    toastr.error(data.message || '{{ __('Failed to save account selection.') }}');
-                }
-            } catch (e) {
-                console.error('Save error:', e);
-                toastr.error('{{ __('An error occurred.') }}');
-            } finally {
-                this.savingAccount = false;
-            }
-        }
-    }"
     x-show="editingStep === 5"
     x-cloak
 >
@@ -121,21 +19,21 @@
         <div class="relative">
             <input
                 type="text"
-                x-model="searchQuery"
-                placeholder="Search connected accounts..."
+                x-model="channelSearchQuery"
+                placeholder="{{ __('Search connected accounts...') }}"
                 class="lqd-input w-full"
             >
         </div>
 
         <!-- Account List -->
         <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <template x-if="loadingAccounts">
+            <template x-if="channelLoadingAccounts">
                 <div class="p-4 text-center text-sm text-gray-500">
-                    Loading...
+                    @lang('Loading...')
                 </div>
             </template>
 
-            <template x-if="!loadingAccounts && filteredAccounts.length === 0">
+            <template x-if="!channelLoadingAccounts && channelFilteredAccounts.length === 0">
                 <div class="p-4 text-center text-sm text-gray-500">
                     @lang('No connected accounts yet.')
                     <a href="{{ route('dashboard.user.integrations.index') }}" class="text-primary underline">
@@ -144,30 +42,30 @@
                 </div>
             </template>
 
-            <template x-if="!loadingAccounts && filteredAccounts.length > 0">
+            <template x-if="!channelLoadingAccounts && channelFilteredAccounts.length > 0">
                 <div class="max-h-64 overflow-y-auto">
-                    <template x-for="account in filteredAccounts" :key="account.id">
+                    <template x-for="account in channelFilteredAccounts" :key="account.id">
                         <div
                             class="flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
-                            @click="toggleAccount(account.id)"
+                            @click="channelToggleAccount(account.id)"
                         >
                             <input
                                 type="checkbox"
-                                :checked="selectedAccountIds.includes(account.id)"
+                                :checked="channelSelectedIds.includes(account.id)"
                                 @click.stop
                                 class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                             >
                             <div class="flex-1 flex items-center gap-3">
                                 <template x-if="account.account_avatar">
-                                    <img :src="account.account_avatar" class="w-8 h-8 rounded-full object-cover">
+                                    <img :src="account.account_avatar" class="w-8 h-8 rounded-full object-cover" alt="">
                                 </template>
                                 <template x-if="!account.account_avatar">
                                     <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
-                                        <span x-text="account.account_name ? account.account_name.charAt(0).toUpperCase() : account.platform.charAt(0).toUpperCase()"></span>
+                                        <span x-text="(account.account_name || account.platform || '?').charAt(0).toUpperCase()"></span>
                                     </div>
                                 </template>
                                 <div class="flex-1">
-                                    <div class="font-medium text-sm" x-text="account.account_name"></div>
+                                    <div class="font-medium text-sm" x-text="account.account_name || account.account_username || account.platform"></div>
                                     <div class="text-xs text-gray-500">
                                         <span x-text="account.platform_label"></span>
                                         <template x-if="account.account_username">
@@ -185,19 +83,16 @@
         <!-- Selection Summary & Save Button -->
         <div class="flex items-center justify-between text-sm mt-4">
             <span class="text-gray-600 dark:text-gray-400">
-                <span x-text="selectedAccountIds.length"></span> accounts selected
+                <span x-text="channelSelectedIds.length"></span>&nbsp;@lang('accounts selected')
             </span>
             <button
-                @click="saveAccountSelection()"
-                :disabled="savingAccount"
+                @click="channelSaveSelection()"
+                :disabled="channelSaving"
                 class="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                type="button"
             >
-                <template x-if="savingAccount">
-                    Saving...
-                </template>
-                <template x-if="!savingAccount">
-                    Save Connected Accounts
-                </template>
+                <span x-show="channelSaving">@lang('Saving...')</span>
+                <span x-show="!channelSaving">@lang('Save Connected Accounts')</span>
             </button>
         </div>
     </div>

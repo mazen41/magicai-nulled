@@ -19,7 +19,14 @@ class ChatbotConnectedAccountController extends Controller
             ->where('user_id', $user->id)
             ->findOrFail($chatbotId);
 
+        // Support both JSON body and form-data submissions
         $accountIds = $request->input('connected_account_ids', []);
+
+        // Ensure we always have a plain array of integers
+        if (!is_array($accountIds)) {
+            $accountIds = [];
+        }
+        $accountIds = array_values(array_filter(array_map('intval', $accountIds)));
 
         // Debug: Log what was received
         \Log::info('Connected Account Update', [
