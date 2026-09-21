@@ -8,17 +8,15 @@ use App\Services\OAuth\OAuthStateService;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * WhatsApp Business Cloud API — Meta Embedded Signup (OAuth) flow.
+ * WhatsApp Business Cloud API — Meta Embedded Signup flow.
  *
  * Flow:
- *   connect()  → redirect to Meta OAuth dialog
- *   callback() → exchange code → fetch all WABAs + phones → show picker
- *   select()   → user picks a phone → save ConnectedAccount
+ *   connect()  → redirect to Meta Embedded Signup URL
+ *   callback() → receive session info → verify → obtain token → save ConnectedAccount
  */
 class WhatsAppCloudOAuthController extends Controller
 {
@@ -28,12 +26,13 @@ class WhatsAppCloudOAuthController extends Controller
     ) {}
 
     // -------------------------------------------------------------------------
-    // Step 1: Redirect to Meta OAuth
+    // Step 1: Redirect to Meta Embedded Signup
     // -------------------------------------------------------------------------
     public function connect()
     {
         $user  = Auth::user();
         $appId = config('services.meta.whatsapp.app_id');
+        $configId = config('services.meta.whatsapp.config_id');
 
         if (empty($appId)) {
             return back()->with([
@@ -42,40 +41,61 @@ class WhatsAppCloudOAuthController extends Controller
             ]);
         }
 
+        if (empty($configId)) {
+            return back()->with([
+                'type'    => 'error',
+                'message' => trans('WhatsApp Embedded Signup Config ID is not configured. Please contact the administrator.'),
+            ]);
+        }
+
         $state = $this->stateService->generate('whatsapp_cloud', $user->id);
 
+        // Meta Embedded Signup URL with required parameters
         $params = [
-            'response_type' => 'code',
-            'client_id'     => $appId,
-            'redirect_uri'  => $this->redirectUri(),
-            'scope'         => config('services.meta.whatsapp.scope', 'whatsapp_business_management,whatsapp_business_messaging'),
+            'app_id'        => $appId,
+            'config_id'     => $configId,
+            'callback_url'  => $this->redirectUri(),
             'state'         => $state,
+            'extras'        => json_encode([
+                'sessionInfoVersion' => '3',
+                'version' => 'v4',
+            ]),
         ];
 
-        return redirect()->away('https://www.facebook.com/dialog/oauth?' . http_build_query($params));
+        $embeddedSignupUrl = 'https://business.facebook.com/messaging/whatsapp/onboard/?' . http_build_query($params);
+
+        Log::info('WhatsApp Cloud: Redirecting to Embedded Signup', [
+            'user_id' => $user->id,
+            'app_id' => $appId,
+            'config_id' => $configId,
+        ]);
+
+        return redirect()->away($embeddedSignupUrl);
     }
 
     // -------------------------------------------------------------------------
-    // Step 2: Meta redirects back — exchange code, fetch phones, show picker
+    // Step 2: Meta redirects back with session info
     // -------------------------------------------------------------------------
     public function callback(Request $request)
     {
         $user = Auth::user();
 
+        // Handle errors from Meta
         if ($request->has('error')) {
+            Log::warning('WhatsApp Cloud: Embedded Signup error', [
+                'user_id' => $user->id,
+                'error' => $request->input('error'),
+                'error_description' => $request->input('error_description'),
+            ]);
+
             return redirect()->route('dashboard.user.integrations.index')
-                ->with(['type' => 'error', 'message' => trans('WhatsApp authorization was denied.')]);
+                ->with(['type' => 'error', 'message' => trans('WhatsApp authorization was denied or failed.')]);
         }
 
-        $code  = $request->input('code');
+        // Validate state
         $state = $request->input('state');
-
-        if (! $code || ! $state) {
-            return redirect()->route('dashboard.user.integrations.index')
-                ->with(['type' => 'error', 'message' => trans('Invalid callback parameters.')]);
-        }
-
-        if (! $this->stateService->validate('whatsapp_cloud', $user->id, $state)) {
+        if (! $state || ! $this->stateService->validate('whatsapp_cloud', $user->id, $state)) {
+            Log::warning('WhatsApp Cloud: Invalid OAuth state', ['user_id' => $user->id]);
             return redirect()->route('dashboard.user.integrations.index')
                 ->with(['type' => 'error', 'message' => trans('Invalid or expired OAuth state. Please try again.')]);
         }
@@ -83,194 +103,120 @@ class WhatsAppCloudOAuthController extends Controller
         try {
             $graphVersion = config('services.meta.graph_version', 'v18.0');
 
-            // Exchange code for user access token
+            // Extract Embedded Signup session information
+            $wabaId = $request->input('wa_id');
+            $phoneNumberId = $request->input('phone_number_id');
+            $phoneNumber = $request->input('phone_number');
+            $displayPhoneNumber = $request->input('display_phone_number');
+
+            Log::info('WhatsApp Cloud: Received Embedded Signup callback', [
+                'user_id' => $user->id,
+                'waba_id' => $wabaId,
+                'phone_number_id' => $phoneNumberId,
+                'has_phone_number' => !empty($phoneNumber),
+            ]);
+
+            // Validate required parameters
+            if (empty($wabaId) || empty($phoneNumberId)) {
+                Log::error('WhatsApp Cloud: Missing required Embedded Signup parameters', [
+                    'user_id' => $user->id,
+                    'waba_id' => $wabaId,
+                    'phone_number_id' => $phoneNumberId,
+                ]);
+
+                return redirect()->route('dashboard.user.integrations.index')
+                    ->with(['type' => 'error', 'message' => trans('WhatsApp Embedded Signup did not return required information. Please try again.')]);
+            }
+
+            // Obtain system user access token using app credentials
+            // This token is used to verify the WABA and get a permanent access token
             $tokenRes = Http::asForm()
                 ->post("https://graph.facebook.com/{$graphVersion}/oauth/access_token", [
                     'client_id'     => config('services.meta.whatsapp.app_id'),
                     'client_secret' => config('services.meta.whatsapp.app_secret'),
-                    'code'          => $code,
-                    'redirect_uri'  => $this->redirectUri(),
+                    'grant_type'    => 'client_credentials',
                 ])->throw()->json();
 
-            $userToken = $tokenRes['access_token'];
+            $systemUserToken = $tokenRes['access_token'];
 
-            // Collect all WABAs + their phone numbers
-            $phones = $this->fetchAllPhones($userToken, $graphVersion);
+            // Get the WhatsApp Business Account details to verify access
+            $wabaRes = Http::withToken($systemUserToken)
+                ->get("https://graph.facebook.com/{$graphVersion}/{$wabaId}", [
+                    'fields' => 'id,name,currency,message_template_namespace',
+                ])->throw()->json();
 
-            if (empty($phones)) {
-                return redirect()->route('dashboard.user.integrations.index')
-                    ->with(['type' => 'error', 'message' => trans('No WhatsApp Business phone numbers found on your Meta account.')]);
+            // Get the phone number details to verify and get more info
+            $phoneRes = Http::withToken($systemUserToken)
+                ->get("https://graph.facebook.com/{$graphVersion}/{$phoneNumberId}", [
+                    'fields' => 'id,display_phone_number,verified_name,quality_rating',
+                ])->throw()->json();
+
+            // Subscribe the phone number to the webhook (optional but recommended)
+            $webhookUrl = config('app.url') . '/api/v2/chatbot/webhook/whatsapp';
+            $webhookVerifyToken = env('WHATSAPP_WEBHOOK_VERIFY_TOKEN');
+
+            try {
+                Http::withToken($systemUserToken)
+                    ->post("https://graph.facebook.com/{$graphVersion}/{$phoneNumberId}/subscribers", [
+                        'webhook_url' => $webhookUrl,
+                        'fields' => 'messages',
+                        'verify_token' => $webhookVerifyToken,
+                    ]);
+
+                Log::info('WhatsApp Cloud: Webhook subscribed successfully', [
+                    'phone_number_id' => $phoneNumberId,
+                ]);
+            } catch (Exception $e) {
+                Log::warning('WhatsApp Cloud: Failed to subscribe webhook', [
+                    'phone_number_id' => $phoneNumberId,
+                    'error' => $e->getMessage(),
+                ]);
+                // Continue anyway - webhook can be configured later
             }
 
-            // If only one phone, connect it directly without showing picker
-            if (count($phones) === 1) {
-                $this->savePhone($user, $phones[0], $userToken);
-                return redirect()->route('dashboard.user.integrations.index')
-                    ->with(['type' => 'success', 'message' => trans('WhatsApp Business account connected successfully.')]);
-            }
+            // Create or update ConnectedAccount
+            $displayLabel = $phoneRes['verified_name'] ?? $displayPhoneNumber ?? $phoneNumber ?? 'WhatsApp Business';
 
-            // Store token + phone list in cache for the select step (5 min TTL)
-            $pickToken = bin2hex(random_bytes(16));
-            Cache::put("wa_pick_{$user->id}_{$pickToken}", [
-                'token'  => $userToken,
-                'phones' => $phones,
-            ], 300);
+            $this->accountService->createOrUpdate(
+                user:              $user,
+                platform:          'whatsapp_cloud',
+                accountIdentifier: $phoneNumberId,
+                accessToken:       $systemUserToken,
+                accountData: [
+                    'name'     => $displayLabel,
+                    'username' => $displayPhoneNumber ?? $phoneNumber,
+                    'avatar'   => null,
+                    'metadata' => [
+                        'phone_number_id'              => $phoneNumberId,
+                        'whatsapp_business_account_id' => $wabaId,
+                        'phone_number'                 => $displayPhoneNumber ?? $phoneNumber,
+                        'display_name'                 => $displayLabel,
+                        'waba_name'                    => $wabaRes['name'] ?? 'Unknown',
+                        'currency'                     => $wabaRes['currency'] ?? null,
+                        'quality_rating'               => $phoneRes['quality_rating'] ?? null,
+                    ],
+                ]
+            );
 
-            return redirect()->route('dashboard.user.integrations.whatsapp-cloud.select', [
-                'pick' => $pickToken,
-            ]);
-
-        } catch (Exception $e) {
-            Log::error('WhatsApp Cloud OAuth callback failed', [
+            Log::info('WhatsApp Cloud: ConnectedAccount created successfully', [
                 'user_id' => $user->id,
-                'error'   => $e->getMessage(),
+                'waba_id' => $wabaId,
+                'phone_number_id' => $phoneNumberId,
             ]);
-
-            return redirect()->route('dashboard.user.integrations.index')
-                ->with(['type' => 'error', 'message' => trans('Failed to connect WhatsApp Business account. Please try again.')]);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Step 3: Show phone number picker
-    // -------------------------------------------------------------------------
-    public function select(Request $request)
-    {
-        $user      = Auth::user();
-        $pickToken = $request->query('pick');
-        $cached    = Cache::get("wa_pick_{$user->id}_{$pickToken}");
-
-        if (! $cached) {
-            return redirect()->route('dashboard.user.integrations.whatsapp-cloud.connect')
-                ->with(['type' => 'error', 'message' => trans('Session expired. Please try connecting again.')]);
-        }
-
-        return view('panel.user.integrations.whatsapp-cloud.select', [
-            'phones'     => $cached['phones'],
-            'pick_token' => $pickToken,
-        ]);
-    }
-
-    // -------------------------------------------------------------------------
-    // Step 4: User submits chosen phone — save ConnectedAccount
-    // -------------------------------------------------------------------------
-    public function store(Request $request)
-    {
-        $user      = Auth::user();
-        $pickToken = $request->input('pick_token');
-        $cached    = Cache::get("wa_pick_{$user->id}_{$pickToken}");
-
-        if (! $cached) {
-            return redirect()->route('dashboard.user.integrations.whatsapp-cloud.connect')
-                ->with(['type' => 'error', 'message' => trans('Session expired. Please try connecting again.')]);
-        }
-
-        $phoneId = $request->input('phone_number_id');
-        $phone   = collect($cached['phones'])->firstWhere('phone_number_id', $phoneId);
-
-        if (! $phone) {
-            return back()->with(['type' => 'error', 'message' => trans('Invalid selection. Please try again.')]);
-        }
-
-        try {
-            $this->savePhone($user, $phone, $cached['token']);
-            Cache::forget("wa_pick_{$user->id}_{$pickToken}");
 
             return redirect()->route('dashboard.user.integrations.index')
                 ->with(['type' => 'success', 'message' => trans('WhatsApp Business account connected successfully.')]);
 
         } catch (Exception $e) {
-            Log::error('WhatsApp Cloud store failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+            Log::error('WhatsApp Cloud Embedded Signup callback failed', [
+                'user_id' => $user->id,
+                'error'   => $e->getMessage(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
 
             return redirect()->route('dashboard.user.integrations.index')
                 ->with(['type' => 'error', 'message' => trans('Failed to connect WhatsApp Business account. Please try again.')]);
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * Fetch every WABA + phone number the token can access.
-     * Returns a flat array of phone entries.
-     */
-    private function fetchAllPhones(string $token, string $graphVersion): array
-    {
-        $phones = [];
-
-        // Primary: me/businesses → nested WABAs → nested phone_numbers
-        $bizRes = Http::withToken($token)
-            ->get("https://graph.facebook.com/{$graphVersion}/me/businesses", [
-                'fields' => 'id,name,whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name}}',
-            ])->json();
-
-        foreach ($bizRes['data'] ?? [] as $business) {
-            foreach ($business['whatsapp_business_accounts']['data'] ?? [] as $waba) {
-                foreach ($waba['phone_numbers']['data'] ?? [] as $p) {
-                    $phones[] = [
-                        'phone_number_id' => $p['id'],
-                        'waba_id'         => $waba['id'],
-                        'waba_name'       => $waba['name'] ?? 'Unknown',
-                        'phone_number'    => $p['display_phone_number'] ?? '',
-                        'verified_name'   => $p['verified_name'] ?? '',
-                    ];
-                }
-            }
-        }
-
-        // Fallback: me/whatsapp_business_accounts (direct WABA access)
-        if (empty($phones)) {
-            $wabaRes = Http::withToken($token)
-                ->get("https://graph.facebook.com/{$graphVersion}/me/whatsapp_business_accounts", [
-                    'fields' => 'id,name',
-                ])->json();
-
-            foreach ($wabaRes['data'] ?? [] as $waba) {
-                $phonesRes = Http::withToken($token)
-                    ->get("https://graph.facebook.com/{$graphVersion}/{$waba['id']}/phone_numbers", [
-                        'fields' => 'id,display_phone_number,verified_name',
-                    ])->json();
-
-                foreach ($phonesRes['data'] ?? [] as $p) {
-                    $phones[] = [
-                        'phone_number_id' => $p['id'],
-                        'waba_id'         => $waba['id'],
-                        'waba_name'       => $waba['name'] ?? 'Unknown',
-                        'phone_number'    => $p['display_phone_number'] ?? '',
-                        'verified_name'   => $p['verified_name'] ?? '',
-                    ];
-                }
-            }
-        }
-
-        return $phones;
-    }
-
-    /**
-     * Persist a phone entry as a ConnectedAccount.
-     */
-    private function savePhone($user, array $phone, string $token): void
-    {
-        $displayLabel = $phone['verified_name'] ?: $phone['phone_number'] ?: 'WhatsApp Business';
-
-        $this->accountService->createOrUpdate(
-            user:              $user,
-            platform:          'whatsapp_cloud',
-            accountIdentifier: $phone['phone_number_id'],
-            accessToken:       $token,
-            accountData: [
-                'name'     => $displayLabel,
-                'username' => $phone['phone_number'],
-                'avatar'   => null,
-                'metadata' => [
-                    'phone_number_id'              => $phone['phone_number_id'],
-                    'whatsapp_business_account_id' => $phone['waba_id'],
-                    'phone_number'                 => $phone['phone_number'],
-                    'display_name'                 => $displayLabel,
-                ],
-            ]
-        );
     }
 
     private function redirectUri(): string

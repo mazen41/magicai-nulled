@@ -96,10 +96,6 @@ class ChatbotWhatsappServiceProvider extends ServiceProvider
                     ->group(function (Router $router) {
                         $router->post('store', 'store')->name('store');
                     });
-
-                // NOTE: WhatsApp Cloud OAuth routes (connect/callback/select/store) are
-                // registered in routes/panel.php under dashboard.user.integrations.whatsapp-cloud.*
-                // Do NOT register them here — doing so creates duplicates that break the callback/select flow.
             });
 
         return $this;

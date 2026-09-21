@@ -28,13 +28,6 @@ class ChatbotConnectedAccountController extends Controller
         }
         $accountIds = array_values(array_filter(array_map('intval', $accountIds)));
 
-        // Debug: Log what was received
-        \Log::info('Connected Account Update', [
-            'chatbot_id' => $chatbotId,
-            'account_ids_received' => $accountIds,
-            'account_ids_count' => count($accountIds),
-        ]);
-
         // Verify all accounts belong to the user and are connected
         if (!empty($accountIds)) {
             $accounts = ConnectedAccount::query()
@@ -44,10 +37,6 @@ class ChatbotConnectedAccountController extends Controller
                 ->get();
 
             if ($accounts->count() !== count($accountIds)) {
-                \Log::warning('Connected Account ownership validation failed', [
-                    'requested' => $accountIds,
-                    'found' => $accounts->pluck('id')->toArray(),
-                ]);
                 return response()->json([
                     'status'  => 'error',
                     'message' => trans('One or more connected accounts not found or access denied.'),
@@ -58,17 +47,15 @@ class ChatbotConnectedAccountController extends Controller
         // Sync the many-to-many relationship
         $chatbot->connectedAccounts()->sync($accountIds);
 
-        \Log::info('Connected Account Sync completed', [
-            'chatbot_id' => $chatbotId,
-            'synced_ids' => $accountIds,
-            'resulting_ids' => $chatbot->connectedAccounts->pluck('id')->toArray(),
-        ]);
+        // Reload the relation so the response reflects the actual DB state
+        $chatbot->load('connectedAccounts');
+        $savedIds = $chatbot->connectedAccounts->pluck('id')->map(fn ($id) => (int) $id)->toArray();
 
         return response()->json([
             'status'  => 'success',
             'message' => trans('Account selection saved.'),
             'data'    => [
-                'connected_account_ids' => $chatbot->connectedAccounts->pluck('id')->toArray(),
+                'connected_account_ids' => $savedIds,
             ],
         ]);
     }
