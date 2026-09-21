@@ -7,7 +7,6 @@ namespace App\Extensions\ChatbotWhatsapp\System;
 use App\Extensions\ChatbotWhatsapp\System\Http\Controllers\ChatbotWhatsappController;
 use App\Extensions\ChatbotWhatsapp\System\Http\Controllers\Webhook\ChatbotTwilioController;
 use App\Extensions\ChatbotWhatsapp\System\Http\Controllers\Webhook\ChatbotWhatsAppCloudWebhookController;
-use App\Http\Controllers\Integration\WhatsAppCloudOAuthController;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Route;
@@ -98,13 +97,9 @@ class ChatbotWhatsappServiceProvider extends ServiceProvider
                         $router->post('store', 'store')->name('store');
                     });
 
-                // WhatsApp Cloud API connect form + store
-                $router->prefix('dashboard/user/integrations/whatsapp-cloud')
-                    ->as('dashboard.user.integrations.whatsapp-cloud.')
-                    ->group(function (Router $router) {
-                        $router->get('connect', [WhatsAppCloudOAuthController::class, 'connect'])->name('connect');
-                        $router->post('store', [WhatsAppCloudOAuthController::class, 'store'])->name('store');
-                    });
+                // NOTE: WhatsApp Cloud OAuth routes (connect/callback/select/store) are
+                // registered in routes/panel.php under dashboard.user.integrations.whatsapp-cloud.*
+                // Do NOT register them here — doing so creates duplicates that break the callback/select flow.
             });
 
         return $this;
