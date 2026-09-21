@@ -30,7 +30,12 @@ class GeneratorService
         $driver = Entity::driver($this->entityEnum)
             ->forUser($this->chatbot->user);
 
-        if (! $driver->hasCreditBalance()) {
+        // Chatbot responses use the system API key, not user credits.
+        // Only block if the user is not an admin AND has no credits.
+        $user = $this->chatbot->user;
+        $isAdmin = $user && method_exists($user, 'isAdmin') && $user->isAdmin();
+
+        if (! $isAdmin && ! $driver->hasCreditBalance()) {
             return trans('You have no credits left. Please consider upgrading your plan.');
         }
 
@@ -41,10 +46,12 @@ class GeneratorService
             ->setPrompt($this->prompt)
             ->generate();
 
-        $driver
-            ->input($generated)
-            ->calculateCredit()
-            ->decreaseCredit();
+        if (! $isAdmin) {
+            $driver
+                ->input($generated)
+                ->calculateCredit()
+                ->decreaseCredit();
+        }
 
         return $generated;
     }
