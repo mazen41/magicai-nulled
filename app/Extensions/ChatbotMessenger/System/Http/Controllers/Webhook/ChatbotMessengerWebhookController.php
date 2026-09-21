@@ -64,20 +64,31 @@ class ChatbotMessengerWebhookController extends Controller
             return response('OK', 200);
         }
 
-        // Find active chatbots linked to this account via the pivot table
-        $chatbots = $account->extChatbots()
-            ->where('active', true)
-            ->get();
+        // Find ALL chatbots linked to this account via the pivot table (don't filter by active — let the chatbot's own logic handle that)
+        $allChatbots = $account->extChatbots()->get();
+        $chatbots    = $allChatbots->where('active', true);
 
         Log::info('Messenger webhook: chatbots found for account', [
-            'account_id'   => $account->id,
-            'page_id'      => $pageId,
-            'chatbot_count' => $chatbots->count(),
-            'chatbot_ids'  => $chatbots->pluck('id')->toArray(),
+            'account_id'        => $account->id,
+            'page_id'           => $pageId,
+            'total_linked'      => $allChatbots->count(),
+            'active_count'      => $chatbots->count(),
+            'all_chatbot_ids'   => $allChatbots->pluck('id')->toArray(),
+            'active_chatbot_ids' => $chatbots->pluck('id')->toArray(),
         ]);
 
+        // If no active chatbots, fall back to any linked chatbot
         if ($chatbots->isEmpty()) {
-            Log::warning('Messenger webhook: account has no active linked chatbots — assign one on the Channel step', [
+            $chatbots = $allChatbots;
+            Log::warning('Messenger webhook: no active chatbots found — falling back to all linked chatbots (including inactive)', [
+                'account_id'   => $account->id,
+                'page_id'      => $pageId,
+                'chatbot_count' => $chatbots->count(),
+            ]);
+        }
+
+        if ($chatbots->isEmpty()) {
+            Log::warning('Messenger webhook: account has NO linked chatbots at all — assign one on the Channel step', [
                 'account_id' => $account->id,
                 'page_id'    => $pageId,
             ]);
@@ -100,10 +111,20 @@ class ChatbotMessengerWebhookController extends Controller
 
         // The Page access token lives on the ConnectedAccount (encrypted).
         // We must store/refresh it in channel credentials so MessengerService can send replies.
+        // Note: $account->access_token uses the 'encrypted' cast and returns the plaintext value even though it's in $hidden.
+        $rawToken = $account->access_token;
+
+        Log::info('Messenger webhook: building credentials', [
+            'chatbot_id'   => $chatbot->id,
+            'account_id'   => $account->id,
+            'has_token'    => !empty($rawToken),
+            'token_prefix' => $rawToken ? substr($rawToken, 0, 8) . '...' : 'EMPTY',
+        ]);
+
         $credentials = [
             'page_id'              => $pageId,
             'connected_account_id' => $account->id,
-            'access_token'         => $account->access_token, // decrypted by model cast
+            'access_token'         => $rawToken,
         ];
 
         if (!$channel) {
@@ -118,6 +139,7 @@ class ChatbotMessengerWebhookController extends Controller
         } else {
             // Refresh the access token in case it was rotated
             $channel->update(['credentials' => $credentials]);
+            Log::info('Messenger webhook: refreshed ChatbotChannel credentials', ['channel_id' => $channel->id]);
         }
 
         return $this->processWebhook($chatbot->id, $channel->id, $request);
@@ -170,12 +192,16 @@ class ChatbotMessengerWebhookController extends Controller
         $channel = ChatbotChannel::query()->findOrFail($channelId);
 
         // Persist the raw webhook payload for debugging
-        ChatbotChannelWebhook::query()->create([
-            'chatbot_id'         => $chatbotId,
-            'chatbot_channel_id' => $channelId,
-            'payload'            => $request->all(),
-            'created_at'         => now(),
-        ]);
+        try {
+            ChatbotChannelWebhook::query()->create([
+                'chatbot_id'         => $chatbotId,
+                'chatbot_channel_id' => $channelId,
+                'payload'            => $request->all(),
+                'created_at'         => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Messenger webhook: could not persist webhook payload', ['error' => $e->getMessage()]);
+        }
 
         $messaging = $request->input('entry.0.messaging.0');
 
@@ -194,41 +220,71 @@ class ChatbotMessengerWebhookController extends Controller
             return response('OK', 200);
         }
 
+        // Skip delivery/read receipts
+        if (isset($messaging['delivery']) || isset($messaging['read'])) {
+            Log::info('Messenger webhook: skipping delivery/read receipt', ['chatbot_id' => $chatbotId]);
+            return response('OK', 200);
+        }
+
         $messageText = data_get($messaging, 'message.text');
         $senderId    = data_get($messaging, 'sender.id');
 
         Log::info('Messenger webhook: processing message', [
-            'chatbot_id'  => $chatbotId,
-            'channel_id'  => $channelId,
-            'sender_id'   => $senderId,
-            'has_text'    => !empty($messageText),
-            'message_preview' => $messageText ? mb_substr($messageText, 0, 80) : null,
-        ]);
-
-        $this->service
-            ->setIpAddress()
-            ->setChatbotId($chatbotId)
-            ->setChannelId($channelId)
-            ->setPayload($messaging);
-
-        $conversation = $this->service->storeConversation();
-
-        /** @var \App\Extensions\Chatbot\System\Models\Chatbot $chatbot */
-        $chatbot = $this->service->getChatbot();
-
-        $this->service->insertMessage(
-            conversation: $conversation,
-            message:      $messageText ?? '',
-            role:         'user',
-            model:        $chatbot->getAttribute('ai_model')
-        );
-
-        $this->service->handle();
-
-        Log::info('Messenger webhook: message handled successfully', [
             'chatbot_id'      => $chatbotId,
-            'conversation_id' => $conversation->id,
+            'channel_id'      => $channelId,
+            'sender_id'       => $senderId,
+            'has_text'        => !empty($messageText),
+            'message_preview' => $messageText ? mb_substr($messageText, 0, 80) : null,
+            'channel_creds'   => [
+                'has_page_id'     => !empty(data_get($channel->credentials, 'page_id')),
+                'has_token'       => !empty(data_get($channel->credentials, 'access_token')),
+                'token_prefix'    => data_get($channel->credentials, 'access_token')
+                    ? substr(data_get($channel->credentials, 'access_token'), 0, 8) . '...'
+                    : 'MISSING',
+            ],
         ]);
+
+        try {
+            $this->service
+                ->setIpAddress()
+                ->setChatbotId($chatbotId)
+                ->setChannelId($channelId)
+                ->setPayload($messaging);
+
+            $conversation = $this->service->storeConversation();
+
+            /** @var \App\Extensions\Chatbot\System\Models\Chatbot $chatbot */
+            $chatbot = $this->service->getChatbot();
+
+            Log::info('Messenger webhook: conversation stored, inserting user message', [
+                'chatbot_id'      => $chatbotId,
+                'conversation_id' => $conversation->id,
+                'chatbot_active'  => $chatbot->getAttribute('active'),
+                'ai_model'        => $chatbot->getAttribute('ai_model'),
+            ]);
+
+            $this->service->insertMessage(
+                conversation: $conversation,
+                message:      $messageText ?? '',
+                role:         'user',
+                model:        $chatbot->getAttribute('ai_model')
+            );
+
+            $this->service->handle();
+
+            Log::info('Messenger webhook: message handled successfully', [
+                'chatbot_id'      => $chatbotId,
+                'conversation_id' => $conversation->id,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Messenger webhook: FATAL error during message processing', [
+                'chatbot_id' => $chatbotId,
+                'channel_id' => $channelId,
+                'error'      => $e->getMessage(),
+                'file'       => $e->getFile() . ':' . $e->getLine(),
+                'trace'      => mb_substr($e->getTraceAsString(), 0, 2000),
+            ]);
+        }
 
         return response('OK', 200);
     }

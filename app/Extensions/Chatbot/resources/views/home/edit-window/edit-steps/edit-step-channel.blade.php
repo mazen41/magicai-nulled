@@ -90,10 +90,8 @@
                 :disabled="channelSaving"
                 class="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 type="button"
-            >
-                <span x-show="channelSaving">@lang('Saving...')</span>
-                <span x-show="!channelSaving">@lang('Save Connected Accounts')</span>
-            </button>
+                x-text="channelSaving ? '{{ __('Saving...') }}' : '{{ __('Save Connected Accounts') }}'"
+            ></button>
         </div>
     </div>
 </div>
