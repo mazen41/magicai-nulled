@@ -547,24 +547,26 @@
 		@includeIf('chatbot-ecommerce::particles.chatbot-config')
 
         @php
-            use App\Domains\Entity\Enums\EntityEnum;
             use App\Domains\Engine\Enums\EngineEnum;
 
-            $chatbotEngines = [
-                'OpenAI'    => EngineEnum::OPEN_AI,
-                'Anthropic' => EngineEnum::ANTHROPIC,
-                'Gemini'    => EngineEnum::GEMINI,
-                'DeepSeek'  => EngineEnum::DEEP_SEEK,
-                'X.AI'      => EngineEnum::X_AI,
+            // Only engines the chatbot GeneratorService actually supports
+            $chatbotSupportedEngines = [
+                EngineEnum::OPEN_AI,
+                EngineEnum::ANTHROPIC,
+                EngineEnum::GEMINI,
+                EngineEnum::DEEP_SEEK,
+                EngineEnum::X_AI,
             ];
 
+            // Pull only models that are enabled in the system (entities table, status=enabled)
+            // filtered to chat-capable, non-deprecated, and only for supported engines
             $chatbotModels = [];
-            foreach ($chatbotEngines as $engineLabel => $engineEnum) {
-                $models = collect(EntityEnum::cases())
-                    ->filter(fn ($m) => $m->engine() === $engineEnum && $m->isChatModel() && ! $m->isDeprecated())
+            foreach ($chatbotSupportedEngines as $engineEnum) {
+                $enabled = $engineEnum->getEnabledModels()
+                    ->filter(fn ($entity) => $entity->key->isChatModel() && ! $entity->key->isDeprecated())
                     ->values();
-                if ($models->isNotEmpty()) {
-                    $chatbotModels[$engineLabel] = $models;
+                if ($enabled->isNotEmpty()) {
+                    $chatbotModels[$engineEnum->label()] = $enabled;
                 }
             }
         @endphp
@@ -581,11 +583,11 @@
                 <option value="">
                     @lang('System Default')
                 </option>
-                @foreach ($chatbotModels as $engineLabel => $models)
+                @foreach ($chatbotModels as $engineLabel => $entities)
                     <optgroup label="{{ $engineLabel }}">
-                        @foreach ($models as $model)
-                            <option value="{{ $model->value }}">
-                                {{ $model->label() }}
+                        @foreach ($entities as $entity)
+                            <option value="{{ $entity->key->value }}">
+                                {{ $entity->key->label() }}
                             </option>
                         @endforeach
                     </optgroup>
