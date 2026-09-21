@@ -51,10 +51,30 @@ class GeminiGenerator extends Generator
 
         $result = $this->chat($body, $apiKey);
 
+        // Log Gemini response for debugging
+        if (! $result->successful()) {
+            Log::error('GeminiGenerator: API error', [
+                'status' => $result->status(),
+                'body'   => $result->body(),
+                'model'  => $this->getEntity()->value,
+            ]);
+            return 'Sorry, there was an error processing your request. (Gemini API error ' . $result->status() . ')';
+        }
+
+        Log::info('GeminiGenerator: API response', [
+            'status'     => $result->status(),
+            'candidates' => $result->json('candidates'),
+            'model'      => $this->getEntity()->value,
+        ]);
+
         // Check for function calls
         $functionCalls = $this->extractFunctionCalls($result);
 
         if (! empty($functionCalls)) {
+            Log::info('GeminiGenerator: function calls detected', [
+                'calls' => array_map(fn($c) => $c['functionCall']['name'] ?? 'unknown', $functionCalls),
+            ]);
+
             // Add assistant's function call to conversation
             $contents[] = [
                 'role'  => 'model',
@@ -140,6 +160,12 @@ class GeminiGenerator extends Generator
                 unset($body['tools']);
 
                 $finalResult = $this->chat($body, $apiKey);
+
+                Log::info('GeminiGenerator: second call response', [
+                    'status'     => $finalResult->status(),
+                    'body'       => $finalResult->body(),
+                    'model'      => $this->getEntity()->value,
+                ]);
 
                 $aiText = $this->extractText($finalResult) ?: 'Sorry, I can\'t answer that.';
 
