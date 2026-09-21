@@ -137,5 +137,13 @@ return [
     */
     'meta' => [
         'graph_version' => env('META_GRAPH_VERSION', 'v18.0'),
+
+        // WhatsApp Business Cloud — Meta Embedded Signup (OAuth)
+        'whatsapp' => [
+            'app_id'       => env('WHATSAPP_FACEBOOK_APP_ID'),
+            'app_secret'   => env('WHATSAPP_FACEBOOK_APP_SECRET'),
+            'redirect_uri' => env('WHATSAPP_FACEBOOK_REDIRECT_URI'),
+            'scope'        => 'whatsapp_business_management,whatsapp_business_messaging',
+        ],
     ],
 ];

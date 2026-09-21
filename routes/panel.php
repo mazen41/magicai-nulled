@@ -181,12 +181,12 @@ Route::middleware(['auth', 'updateUserActivity'])
                             ->name('callback');
                     });
 
-                    // WhatsApp Business Cloud API (manual credentials — not OAuth)
+                    // WhatsApp Business Cloud API — Meta Embedded Signup (OAuth)
                     Route::prefix('whatsapp-cloud')->as('whatsapp-cloud.')->group(function () {
                         Route::get('connect', [\App\Http\Controllers\Integration\WhatsAppCloudOAuthController::class, 'connect'])
                             ->name('connect');
-                        Route::post('store', [\App\Http\Controllers\Integration\WhatsAppCloudOAuthController::class, 'store'])
-                            ->name('store');
+                        Route::get('callback', [\App\Http\Controllers\Integration\WhatsAppCloudOAuthController::class, 'callback'])
+                            ->name('callback');
                     });
                 });
 
