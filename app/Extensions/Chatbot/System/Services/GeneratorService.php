@@ -53,18 +53,23 @@ class GeneratorService
     {
         $setting = Setting::getCache();
 
-        $defaultEngine = EngineEnum::fromSlug(
-            setting('default_external_chatbot_engine', EngineEnum::OPEN_AI->slug())
-        );
+        // Use the chatbot's selected AI model if set, otherwise fall back to system default
+        if (! empty($this->chatbot->ai_model)) {
+            $model = $this->chatbot->ai_model;
+        } else {
+            $defaultEngine = EngineEnum::fromSlug(
+                setting('default_external_chatbot_engine', EngineEnum::OPEN_AI->slug())
+            );
 
-        $model = match ($defaultEngine) {
-            EngineEnum::OPEN_AI   => $setting->openai_default_model ?: EntityEnum::GPT_4_O->slug(),
-            EngineEnum::ANTHROPIC => setting('anthropic_default_model', EntityEnum::CLAUDE_3_OPUS->slug()),
-            EngineEnum::GEMINI    => setting('gemini_default_model', EntityEnum::GEMINI_3_FLASH->slug()),
-            EngineEnum::DEEP_SEEK => setting('deepseek_default_model', EntityEnum::DEEPSEEK_CHAT->slug()),
-            EngineEnum::X_AI      => setting('xai_default_model', EntityEnum::GROK_2_1212->slug()),
-            default               => $setting->openai_default_model ?: EntityEnum::GPT_4_O->slug(),
-        };
+            $model = match ($defaultEngine) {
+                EngineEnum::OPEN_AI   => $setting->openai_default_model ?: EntityEnum::GPT_4_O->slug(),
+                EngineEnum::ANTHROPIC => setting('anthropic_default_model', EntityEnum::CLAUDE_3_OPUS->slug()),
+                EngineEnum::GEMINI    => setting('gemini_default_model', EntityEnum::GEMINI_3_FLASH->slug()),
+                EngineEnum::DEEP_SEEK => setting('deepseek_default_model', EntityEnum::DEEPSEEK_CHAT->slug()),
+                EngineEnum::X_AI      => setting('xai_default_model', EntityEnum::GROK_2_1212->slug()),
+                default               => $setting->openai_default_model ?: EntityEnum::GPT_4_O->slug(),
+            };
+        }
 
         $this->entityEnum = EntityEnum::fromSlug($model);
 

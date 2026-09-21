@@ -85,7 +85,7 @@ class ChatbotStoreRequest extends FormRequest
             'avatar'                    => $this->input('avatar') ?: ChatbotAvatar::query()->first()?->getAttribute('avatar'),
             'uuid'                      => Str::uuid()->toString(),
             'user_id'                   => Auth::id(),
-            'ai_model'                  => Setting::getCache()->openai_default_model,
+            'ai_model'                  => $this->input('ai_model') ?: Setting::getCache()->openai_default_model,
             'ai_embedding_model'        => $this->get('ai_embedding_model') ?: EntityEnum::TEXT_EMBEDDING_3_SMALL->value,
             'suggested_prompts'         => $suggestedPrompts,
             'suggested_prompts_enabled' => (bool) $this->boolean('suggested_prompts_enabled'),

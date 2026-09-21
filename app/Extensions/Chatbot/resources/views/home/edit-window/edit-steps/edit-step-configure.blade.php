@@ -546,31 +546,60 @@
 		@includeIf('chatbot-booking::particles.chatbot-config')
 		@includeIf('chatbot-ecommerce::particles.chatbot-config')
 
-        {{--        <div> --}}
-        {{--            <x-forms.input --}}
-        {{--                class:label="text-heading-foreground" --}}
-        {{--                label="{{ __('AI Model') }}" --}}
-        {{--                name="ai_model" --}}
-        {{--                size="lg" --}}
-        {{--                type="select" --}}
-        {{--                x-model="activeChatbot.ai_model" --}}
-        {{--                x-ref="aiModelSelect" --}}
-        {{--            > --}}
-        {{--                @foreach (\App\Domains\Entity\Enums\EntityEnum::reWriterModels(\App\Domains\Engine\Enums\EngineEnum::OPEN_AI) as $model) --}}
-        {{--                    <option value="{{ $model->value }}"> --}}
-        {{--                        {{ $model->label() }} --}}
-        {{--                    </option> --}}
-        {{--                @endforeach --}}
-        {{--            </x-forms.input> --}}
+        @php
+            use App\Domains\Entity\Enums\EntityEnum;
+            use App\Domains\Engine\Enums\EngineEnum;
 
-        {{--            <template --}}
-        {{--                x-for="(error, index) in formErrors.ai_model" --}}
-        {{--                :key="'error-' + index" --}}
-        {{--            > --}}
-        {{--                <div class="mt-2 text-2xs/5 font-medium text-red-500"> --}}
-        {{--                    <p x-text="error"></p> --}}
-        {{--                </div> --}}
-        {{--            </template> --}}
-        {{--        </div> --}}
+            $chatbotEngines = [
+                'OpenAI'    => EngineEnum::OPEN_AI,
+                'Anthropic' => EngineEnum::ANTHROPIC,
+                'Gemini'    => EngineEnum::GEMINI,
+                'DeepSeek'  => EngineEnum::DEEP_SEEK,
+                'X.AI'      => EngineEnum::X_AI,
+            ];
+
+            $chatbotModels = [];
+            foreach ($chatbotEngines as $engineLabel => $engineEnum) {
+                $models = collect(EntityEnum::cases())
+                    ->filter(fn ($m) => $m->engine() === $engineEnum && $m->isChatModel() && ! $m->isDeprecated())
+                    ->values();
+                if ($models->isNotEmpty()) {
+                    $chatbotModels[$engineLabel] = $models;
+                }
+            }
+        @endphp
+
+        <div>
+            <x-forms.input
+                class:label="text-heading-foreground"
+                label="{{ __('AI Model') }}"
+                name="ai_model"
+                size="lg"
+                type="select"
+                x-model="activeChatbot.ai_model"
+            >
+                <option value="">
+                    @lang('System Default')
+                </option>
+                @foreach ($chatbotModels as $engineLabel => $models)
+                    <optgroup label="{{ $engineLabel }}">
+                        @foreach ($models as $model)
+                            <option value="{{ $model->value }}">
+                                {{ $model->label() }}
+                            </option>
+                        @endforeach
+                    </optgroup>
+                @endforeach
+            </x-forms.input>
+
+            <template
+                x-for="(error, index) in formErrors.ai_model"
+                :key="'error-' + index"
+            >
+                <div class="mt-2 text-2xs/5 font-medium text-red-500">
+                    <p x-text="error"></p>
+                </div>
+            </template>
+        </div>
     </div>
 </div>
