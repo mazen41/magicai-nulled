@@ -8,6 +8,7 @@ use App\Services\OAuth\OAuthStateService;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -15,14 +16,9 @@ use Illuminate\Support\Facades\Log;
  * WhatsApp Business Cloud API — Meta Embedded Signup (OAuth) flow.
  *
  * Flow:
- *   connect()  → redirect user to Meta OAuth dialog
- *   callback() → exchange code for token → fetch phone details → save ConnectedAccount
- *
- * Config keys (config/services.php → meta.whatsapp):
- *   app_id, app_secret, redirect_uri, scope
- *
- * Tokens are stored encrypted by ConnectedAccountService / ConnectedAccount model.
- * Tokens are NEVER logged or returned to the frontend.
+ *   connect()  → redirect to Meta OAuth dialog
+ *   callback() → exchange code → fetch all WABAs + phones → show picker
+ *   select()   → user picks a phone → save ConnectedAccount
  */
 class WhatsAppCloudOAuthController extends Controller
 {
@@ -31,13 +27,12 @@ class WhatsAppCloudOAuthController extends Controller
         private ConnectedAccountService $accountService
     ) {}
 
-    /**
-     * Redirect the user to the Meta OAuth dialog (Embedded Signup).
-     */
+    // -------------------------------------------------------------------------
+    // Step 1: Redirect to Meta OAuth
+    // -------------------------------------------------------------------------
     public function connect()
     {
-        $user = Auth::user();
-
+        $user  = Auth::user();
         $appId = config('services.meta.whatsapp.app_id');
 
         if (empty($appId)) {
@@ -57,20 +52,16 @@ class WhatsAppCloudOAuthController extends Controller
             'state'         => $state,
         ];
 
-        $url = 'https://www.facebook.com/dialog/oauth?' . http_build_query($params);
-
-        return redirect()->away($url);
+        return redirect()->away('https://www.facebook.com/dialog/oauth?' . http_build_query($params));
     }
 
-    /**
-     * Handle the Meta OAuth callback.
-     * Exchange code -> token -> fetch phone number details -> save ConnectedAccount.
-     */
+    // -------------------------------------------------------------------------
+    // Step 2: Meta redirects back — exchange code, fetch phones, show picker
+    // -------------------------------------------------------------------------
     public function callback(Request $request)
     {
         $user = Auth::user();
 
-        // User denied access
         if ($request->has('error')) {
             return redirect()->route('dashboard.user.integrations.index')
                 ->with(['type' => 'error', 'message' => trans('WhatsApp authorization was denied.')]);
@@ -84,7 +75,6 @@ class WhatsAppCloudOAuthController extends Controller
                 ->with(['type' => 'error', 'message' => trans('Invalid callback parameters.')]);
         }
 
-        // CSRF state validation
         if (! $this->stateService->validate('whatsapp_cloud', $user->id, $state)) {
             return redirect()->route('dashboard.user.integrations.index')
                 ->with(['type' => 'error', 'message' => trans('Invalid or expired OAuth state. Please try again.')]);
@@ -92,102 +82,43 @@ class WhatsAppCloudOAuthController extends Controller
 
         try {
             $graphVersion = config('services.meta.graph_version', 'v18.0');
-            $appId        = config('services.meta.whatsapp.app_id');
-            $appSecret    = config('services.meta.whatsapp.app_secret');
 
-            // 1. Exchange authorization code for a user access token
+            // Exchange code for user access token
             $tokenRes = Http::asForm()
                 ->post("https://graph.facebook.com/{$graphVersion}/oauth/access_token", [
-                    'client_id'     => $appId,
-                    'client_secret' => $appSecret,
+                    'client_id'     => config('services.meta.whatsapp.app_id'),
+                    'client_secret' => config('services.meta.whatsapp.app_secret'),
                     'code'          => $code,
                     'redirect_uri'  => $this->redirectUri(),
                 ])->throw()->json();
 
             $userToken = $tokenRes['access_token'];
 
-            // 2. Fetch WhatsApp Business Accounts + phone numbers (nested call)
-            $wabaRes = Http::withToken($userToken)
-                ->get("https://graph.facebook.com/{$graphVersion}/me/businesses", [
-                    'fields' => 'id,name,whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name}}',
-                ])->throw()->json();
+            // Collect all WABAs + their phone numbers
+            $phones = $this->fetchAllPhones($userToken, $graphVersion);
 
-            $businesses    = $wabaRes['data'] ?? [];
-            $phoneNumberId = null;
-            $wabaId        = null;
-            $phoneNumber   = null;
-            $verifiedName  = null;
-
-            foreach ($businesses as $business) {
-                $wabas = $business['whatsapp_business_accounts']['data'] ?? [];
-                foreach ($wabas as $waba) {
-                    $phones = $waba['phone_numbers']['data'] ?? [];
-                    if (! empty($phones)) {
-                        $phone         = $phones[0];
-                        $phoneNumberId = $phone['id'];
-                        $wabaId        = $waba['id'];
-                        $phoneNumber   = $phone['display_phone_number'] ?? null;
-                        $verifiedName  = $phone['verified_name'] ?? null;
-                        break 2;
-                    }
-                }
+            if (empty($phones)) {
+                return redirect()->route('dashboard.user.integrations.index')
+                    ->with(['type' => 'error', 'message' => trans('No WhatsApp Business phone numbers found on your Meta account.')]);
             }
 
-            // Fallback: query WABAs directly when the nested businesses call yields nothing
-            if (! $phoneNumberId) {
-                $wabaFallback = Http::withToken($userToken)
-                    ->get("https://graph.facebook.com/{$graphVersion}/me/whatsapp_business_accounts", [
-                        'fields' => 'id,name',
-                    ])->json();
-
-                $firstWaba = ($wabaFallback['data'] ?? [])[0] ?? null;
-
-                if ($firstWaba) {
-                    $wabaId    = $firstWaba['id'];
-                    $phonesRes = Http::withToken($userToken)
-                        ->get("https://graph.facebook.com/{$graphVersion}/{$wabaId}/phone_numbers", [
-                            'fields' => 'id,display_phone_number,verified_name',
-                        ])->json();
-
-                    $firstPhone = ($phonesRes['data'] ?? [])[0] ?? null;
-                    if ($firstPhone) {
-                        $phoneNumberId = $firstPhone['id'];
-                        $phoneNumber   = $firstPhone['display_phone_number'] ?? null;
-                        $verifiedName  = $firstPhone['verified_name'] ?? null;
-                    }
-                }
+            // If only one phone, connect it directly without showing picker
+            if (count($phones) === 1) {
+                $this->savePhone($user, $phones[0], $userToken);
+                return redirect()->route('dashboard.user.integrations.index')
+                    ->with(['type' => 'success', 'message' => trans('WhatsApp Business account connected successfully.')]);
             }
 
-            if (! $phoneNumberId || ! $wabaId) {
-                throw new Exception(
-                    'No WhatsApp Business phone number found. ' .
-                    'Ensure your Meta account has a verified WhatsApp Business phone number.'
-                );
-            }
+            // Store token + phone list in cache for the select step (5 min TTL)
+            $pickToken = bin2hex(random_bytes(16));
+            Cache::put("wa_pick_{$user->id}_{$pickToken}", [
+                'token'  => $userToken,
+                'phones' => $phones,
+            ], 300);
 
-            $displayLabel = $verifiedName ?: $phoneNumber ?: 'WhatsApp Business';
-
-            // 3. Save as a ConnectedAccount — token is encrypted at rest
-            $this->accountService->createOrUpdate(
-                user:              $user,
-                platform:          'whatsapp_cloud',
-                accountIdentifier: $phoneNumberId,
-                accessToken:       $userToken,
-                accountData: [
-                    'name'     => $displayLabel,
-                    'username' => $phoneNumber,
-                    'avatar'   => null,
-                    'metadata' => [
-                        'phone_number_id'              => $phoneNumberId,
-                        'whatsapp_business_account_id' => $wabaId,
-                        'phone_number'                 => $phoneNumber,
-                        'display_name'                 => $displayLabel,
-                    ],
-                ]
-            );
-
-            return redirect()->route('dashboard.user.integrations.index')
-                ->with(['type' => 'success', 'message' => trans('WhatsApp Business account connected successfully.')]);
+            return redirect()->route('dashboard.user.integrations.whatsapp-cloud.select', [
+                'pick' => $pickToken,
+            ]);
 
         } catch (Exception $e) {
             Log::error('WhatsApp Cloud OAuth callback failed', [
@@ -198,6 +129,148 @@ class WhatsAppCloudOAuthController extends Controller
             return redirect()->route('dashboard.user.integrations.index')
                 ->with(['type' => 'error', 'message' => trans('Failed to connect WhatsApp Business account. Please try again.')]);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Step 3: Show phone number picker
+    // -------------------------------------------------------------------------
+    public function select(Request $request)
+    {
+        $user      = Auth::user();
+        $pickToken = $request->query('pick');
+        $cached    = Cache::get("wa_pick_{$user->id}_{$pickToken}");
+
+        if (! $cached) {
+            return redirect()->route('dashboard.user.integrations.whatsapp-cloud.connect')
+                ->with(['type' => 'error', 'message' => trans('Session expired. Please try connecting again.')]);
+        }
+
+        return view('panel.user.integrations.whatsapp-cloud.select', [
+            'phones'     => $cached['phones'],
+            'pick_token' => $pickToken,
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Step 4: User submits chosen phone — save ConnectedAccount
+    // -------------------------------------------------------------------------
+    public function store(Request $request)
+    {
+        $user      = Auth::user();
+        $pickToken = $request->input('pick_token');
+        $cached    = Cache::get("wa_pick_{$user->id}_{$pickToken}");
+
+        if (! $cached) {
+            return redirect()->route('dashboard.user.integrations.whatsapp-cloud.connect')
+                ->with(['type' => 'error', 'message' => trans('Session expired. Please try connecting again.')]);
+        }
+
+        $phoneId = $request->input('phone_number_id');
+        $phone   = collect($cached['phones'])->firstWhere('phone_number_id', $phoneId);
+
+        if (! $phone) {
+            return back()->with(['type' => 'error', 'message' => trans('Invalid selection. Please try again.')]);
+        }
+
+        try {
+            $this->savePhone($user, $phone, $cached['token']);
+            Cache::forget("wa_pick_{$user->id}_{$pickToken}");
+
+            return redirect()->route('dashboard.user.integrations.index')
+                ->with(['type' => 'success', 'message' => trans('WhatsApp Business account connected successfully.')]);
+
+        } catch (Exception $e) {
+            Log::error('WhatsApp Cloud store failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+
+            return redirect()->route('dashboard.user.integrations.index')
+                ->with(['type' => 'error', 'message' => trans('Failed to connect WhatsApp Business account. Please try again.')]);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Fetch every WABA + phone number the token can access.
+     * Returns a flat array of phone entries.
+     */
+    private function fetchAllPhones(string $token, string $graphVersion): array
+    {
+        $phones = [];
+
+        // Primary: me/businesses → nested WABAs → nested phone_numbers
+        $bizRes = Http::withToken($token)
+            ->get("https://graph.facebook.com/{$graphVersion}/me/businesses", [
+                'fields' => 'id,name,whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name}}',
+            ])->json();
+
+        foreach ($bizRes['data'] ?? [] as $business) {
+            foreach ($business['whatsapp_business_accounts']['data'] ?? [] as $waba) {
+                foreach ($waba['phone_numbers']['data'] ?? [] as $p) {
+                    $phones[] = [
+                        'phone_number_id' => $p['id'],
+                        'waba_id'         => $waba['id'],
+                        'waba_name'       => $waba['name'] ?? 'Unknown',
+                        'phone_number'    => $p['display_phone_number'] ?? '',
+                        'verified_name'   => $p['verified_name'] ?? '',
+                    ];
+                }
+            }
+        }
+
+        // Fallback: me/whatsapp_business_accounts (direct WABA access)
+        if (empty($phones)) {
+            $wabaRes = Http::withToken($token)
+                ->get("https://graph.facebook.com/{$graphVersion}/me/whatsapp_business_accounts", [
+                    'fields' => 'id,name',
+                ])->json();
+
+            foreach ($wabaRes['data'] ?? [] as $waba) {
+                $phonesRes = Http::withToken($token)
+                    ->get("https://graph.facebook.com/{$graphVersion}/{$waba['id']}/phone_numbers", [
+                        'fields' => 'id,display_phone_number,verified_name',
+                    ])->json();
+
+                foreach ($phonesRes['data'] ?? [] as $p) {
+                    $phones[] = [
+                        'phone_number_id' => $p['id'],
+                        'waba_id'         => $waba['id'],
+                        'waba_name'       => $waba['name'] ?? 'Unknown',
+                        'phone_number'    => $p['display_phone_number'] ?? '',
+                        'verified_name'   => $p['verified_name'] ?? '',
+                    ];
+                }
+            }
+        }
+
+        return $phones;
+    }
+
+    /**
+     * Persist a phone entry as a ConnectedAccount.
+     */
+    private function savePhone($user, array $phone, string $token): void
+    {
+        $displayLabel = $phone['verified_name'] ?: $phone['phone_number'] ?: 'WhatsApp Business';
+
+        $this->accountService->createOrUpdate(
+            user:              $user,
+            platform:          'whatsapp_cloud',
+            accountIdentifier: $phone['phone_number_id'],
+            accessToken:       $token,
+            accountData: [
+                'name'     => $displayLabel,
+                'username' => $phone['phone_number'],
+                'avatar'   => null,
+                'metadata' => [
+                    'phone_number_id'              => $phone['phone_number_id'],
+                    'whatsapp_business_account_id' => $phone['waba_id'],
+                    'phone_number'                 => $phone['phone_number'],
+                    'display_name'                 => $displayLabel,
+                ],
+            ]
+        );
     }
 
     private function redirectUri(): string
