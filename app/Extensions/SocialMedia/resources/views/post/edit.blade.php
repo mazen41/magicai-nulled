@@ -35,8 +35,10 @@
 
     $platformUsername = '';
     $platformPicture = '';
+    $currentConnectedAccount = null;
 
     if ($editingPost->connectedAccount) {
+        $currentConnectedAccount = $editingPost->connectedAccount;
         $platformUsername = $editingPost->connectedAccount->getDisplayName();
         $platformPicture = $editingPost->connectedAccount->account_avatar ?? custom_theme_url('/assets/img/avatars/avatar-1.jpg');
     } elseif ($currentPlatform->platform()) {
@@ -87,7 +89,7 @@
 @section('content')
     <div
         class="lqd-social-media-post-create"
-        x-data="socialMediaPostCreate"
+        x-data="socialMediaPostEdit"
     >
         <div class="lqd-social-media-post-create-header max-w-[100vw] border-b">
             <div class="container">
@@ -216,6 +218,11 @@
                                 type="hidden"
                                 name="social_media_platform_id"
                                 x-model="socialMediaPlatformId"
+                            >
+                            <input
+                                type="hidden"
+                                name="connected_account_id"
+                                x-model="connectedAccountId"
                             >
                             <input
                                 type="hidden"
@@ -980,8 +987,9 @@
     <script>
         (() => {
             document.addEventListener('alpine:init', () => {
-                Alpine.data('socialMediaPostCreate', () => ({
+                Alpine.data('socialMediaPostEdit', () => ({
                     userPlatforms: @json($userPlatforms),
+                    connectedAccounts: @json($connectedAccounts),
                     platformUsername: "{{ $platformUsername ?: 'Jhon Doe' }}",
                     platformPicture: "{!! $platformPicture ?: custom_theme_url('/assets/img/avatars/avatar-1.jpg') !!}",
                     currentPlatform: '{{ $current_platform }}',
@@ -1004,6 +1012,7 @@
                     tone: '{{ $tone }}',
                     socialMediaPlatformId: '{{ $social_media_platform_id }}',
                     connectedAccountId: '{{ $editingPost->connected_account_id ?? '' }}',
+                    selectedUserPlatforms: @json($editingPost->connected_account_id ? [] : [$social_media_platform_id]),
                     isStory: false,
                     generatingImage: false,
                     generatingVideo: false,
@@ -1154,6 +1163,10 @@
                         let form = this.$refs.form;
                         let formData = new FormData(form);
                         formData.append('post_now', 1);
+                        if (this.connectedAccountId) {
+                            formData.set('connected_account_id', this.connectedAccountId);
+                            formData.delete('selectedUserPlatforms[]');
+                        }
                         if (this.requiresSingleImage()) {
                             const selectedImage = this.images[this.carouselIndex];
                             formData.set('images', JSON.stringify([selectedImage]));
@@ -1193,6 +1206,10 @@
                         let form = this.$refs.form;
                         let formData = new FormData(form);
                         formData.append('post_now', 0);
+                        if (this.connectedAccountId) {
+                            formData.set('connected_account_id', this.connectedAccountId);
+                            formData.delete('selectedUserPlatforms[]');
+                        }
                         if (this.requiresSingleImage()) {
                             const selectedImage = this.images[this.carouselIndex];
                             formData.set('images', JSON.stringify([selectedImage]));

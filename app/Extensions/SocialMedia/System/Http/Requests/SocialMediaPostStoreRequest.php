@@ -52,8 +52,9 @@ class SocialMediaPostStoreRequest extends FormRequest
             'images'                   => 'sometimes',
             'images.*'                 => 'nullable',
             'video'                    => $videoRule,
-            'selectedUserPlatforms'	   => 'array|required',
+            'selectedUserPlatforms'	   => 'required_without:connected_account_id|array',
             'selectedUserPlatforms.*'  => 'exists:ext_social_media_platforms,id',
+            'connected_account_id'     => 'required_without:selectedUserPlatforms|nullable|exists:connected_accounts,id',
             'status'                   => 'sometimes',
         ];
     }
@@ -74,12 +75,18 @@ class SocialMediaPostStoreRequest extends FormRequest
                 'repeat_start_date' => now()->format('Y-m-d'),
                 'repeat_time'       => now()->format('H:i'),
                 'is_repeated'       => false,
+                'status'            => StatusEnum::pending->value,
             ]);
         } elseif ($this->request->get('post_now') === '0') {
             $this->merge([
                 'scheduled_at'      => Carbon::createFromFormat('m/d/Y', $this->request->get('scheduled_at'))->format('Y-m-d') . ' ' . $this->request->get('repeat_time') . ':00',
                 'repeat_start_date' => Carbon::createFromFormat('m/d/Y', $this->request->get('repeat_start_date'))->format('Y-m-d'),
                 'is_repeated'       => $this->request->get('is_repeated') === 'true' ? '1' : '0',
+                'status'            => StatusEnum::scheduled->value,
+            ]);
+        } else {
+            $this->merge([
+                'status' => StatusEnum::scheduled->value,
             ]);
         }
 
@@ -109,7 +116,6 @@ class SocialMediaPostStoreRequest extends FormRequest
 
         $this->merge([
             'user_id'                 => Auth::id(),
-            'status'                  => StatusEnum::scheduled->value,
             'is_personalized_content' => $this->request->has('is_personalized_content'),
         ]);
     }

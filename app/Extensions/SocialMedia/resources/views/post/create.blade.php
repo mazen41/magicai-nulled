@@ -35,10 +35,15 @@
     $companies_list = $companies->pluck('name', 'id')->toArray();
     $campaigns_list = $campaigns->pluck('name', 'id')->toArray();
 
-    $credentials = $currentPlatform->platform()?->credentials;
-
-    $platformUsername = $credentials['name'] ?? '';
-    $platformPicture = $credentials['picture'] ?? '';
+    $currentConnectedAccount = $connectedAccounts->firstWhere('platform', $currentPlatform->value);
+    if ($currentConnectedAccount) {
+        $platformUsername = $currentConnectedAccount->getDisplayName();
+        $platformPicture = $currentConnectedAccount->account_avatar ?? custom_theme_url('/assets/img/avatars/avatar-1.jpg');
+    } else {
+        $credentials = $currentPlatform->platform()?->credentials;
+        $platformUsername = $credentials['name'] ?? '';
+        $platformPicture = $credentials['picture'] ?? '';
+    }
 
     $all_platforms = \App\Extensions\SocialMedia\System\Enums\PlatformEnum::cases();
     $imageLimits = collect(config('social-media'))->mapWithKeys(fn($v, $k) => [$k => data_get($v, 'requirements.images.limit', 1)])->toArray();
@@ -125,7 +130,7 @@
                             type="button"
                             variant="outline"
                             ::class="{ active: currentPlatform === '{{ $platform->value }}' && {{ $is_connected ? 1 : 0 }} }"
-                            @click.prevent="currentPlatform = '{{ $platform->value }}'; platformUsername = '{{ $name }}'; platformPicture = '{!! $profileImage !!}';socialMediaPlatformId = '{{ $platform->platform()?->id }}'; connectedAccountId = '{{ $connectedAccount?->id ?? '' }}';"
+                            @click.prevent="currentPlatform = '{{ $platform->value }}'; platformUsername = '{{ $name }}'; platformPicture = '{!! $profileImage !!}'; connectedAccountId = '{{ $connectedAccount?->id ?? '' }}'; socialMediaPlatformId = '{{ $connectedAccount ? '' : $platform->platform()?->id }}'; selectedUserPlatforms = {{ $connectedAccount ? '[]' : 'selectedUserPlatforms' }};"
                             :disabled="!$is_connected"
                         >
                             @php
@@ -227,6 +232,11 @@
                                 type="hidden"
                                 name="social_media_platform_id"
                                 x-model="socialMediaPlatformId"
+                            >
+                            <input
+                                type="hidden"
+                                name="connected_account_id"
+                                x-model="connectedAccountId"
                             >
                             <input
                                 type="hidden"
@@ -1024,6 +1034,7 @@
             document.addEventListener('alpine:init', () => {
                 Alpine.data('socialMediaPostCreate', () => ({
                     userPlatforms: @json($userPlatforms),
+                    connectedAccounts: @json($connectedAccounts),
                     selectedUserPlatforms: [],
                     platformUsername: "{{ $platformUsername ?: 'Jhon Doe' }}",
                     platformPicture: "{!! $platformPicture ?: custom_theme_url('/assets/img/avatars/avatar-1.jpg') !!}",
@@ -1046,7 +1057,7 @@
                     campaigns: @json($campaigns_list),
                     tone: '{{ $tone }}',
                     socialMediaPlatformId: '{{ $social_media_platform_id }}',
-                    connectedAccountId: '',
+                    connectedAccountId: '{{ $currentConnectedAccount?->id ?? '' }}',
                     isStory: false,
                     generatingImage: false,
                     generatingVideo: false,
@@ -1191,6 +1202,9 @@
                     },
 
                     getUserPlatforms() {
+                        if (this.connectedAccountId) {
+                            return [];
+                        }
                         return this.userPlatforms.filter(userPlatform => userPlatform.platform ===
                             this.currentPlatform);
                     },
@@ -1205,6 +1219,10 @@
                         formData.append('post_now', 1);
                         formData.append('social_media_platform', this.currentPlatform);
                         formData.append('post_type', this.isStory ? 'story' : 'post');
+                        if (this.connectedAccountId) {
+                            formData.set('connected_account_id', this.connectedAccountId);
+                            formData.delete('selectedUserPlatforms[]');
+                        }
                         if (this.requiresSingleImage()) {
                             const selectedImage = this.images[this.carouselIndex];
                             formData.set('images', JSON.stringify([selectedImage]));
@@ -1250,6 +1268,10 @@
                         formData.append('post_now', 0);
                         formData.append('social_media_platform', this.currentPlatform);
                         formData.append('post_type', this.isStory ? 'story' : 'post');
+                        if (this.connectedAccountId) {
+                            formData.set('connected_account_id', this.connectedAccountId);
+                            formData.delete('selectedUserPlatforms[]');
+                        }
                         if (this.requiresSingleImage()) {
                             const selectedImage = this.images[this.carouselIndex];
                             formData.set('images', JSON.stringify([selectedImage]));

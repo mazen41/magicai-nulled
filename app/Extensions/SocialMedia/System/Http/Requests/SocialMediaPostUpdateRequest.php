@@ -37,7 +37,8 @@ class SocialMediaPostUpdateRequest extends FormRequest
             'repeat_period'            => 'required_if:is_repeated,1|sometimes',
             'repeat_start_date'        => 'required_if:post_now,0|sometimes',
             'repeat_time'              => 'required_if:post_now,0|sometimes',
-            'social_media_platform_id' => 'required',
+            'social_media_platform_id' => 'required_without:connected_account_id|nullable|exists:ext_social_media_platforms,id',
+            'connected_account_id'     => 'required_without:social_media_platform_id|nullable|exists:connected_accounts,id',
             'social_media_platform'    => 'required',
             'post_type'                => 'sometimes|in:post,story',
             'link'                     => 'sometimes',
@@ -56,7 +57,8 @@ class SocialMediaPostUpdateRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'social_media_platform_id.required' => 'Please select a platform',
+            'social_media_platform_id.required_without' => 'Please select a platform',
+            'connected_account_id.required_without' => 'Please select an account',
             'content.required'                  => 'Please enter post content',
         ];
     }
@@ -72,24 +74,37 @@ class SocialMediaPostUpdateRequest extends FormRequest
                 'repeat_start_date' => now()->format('Y-m-d'),
                 'repeat_time'       => now()->format('H:i'),
                 'is_repeated'       => false,
+                'status'            => StatusEnum::pending->value,
             ]);
-        }
-
-        if ($this->request->get('post_now') === '0') {
+        } elseif ($this->request->get('post_now') === '0') {
             $this->merge([
                 'scheduled_at'      => Carbon::createFromFormat('m/d/Y', $this->request->get('scheduled_at'))->format('Y-m-d') . ' ' . $this->request->get('repeat_time') . ':00',
                 'repeat_start_date' => Carbon::createFromFormat('m/d/Y', $this->request->get('repeat_start_date'))->format('Y-m-d'),
                 'is_repeated'       => $this->request->get('is_repeated') === 'true' ? '1' : '0',
+                'status'            => StatusEnum::scheduled->value,
+            ]);
+        } else {
+            $this->merge([
+                'status' => StatusEnum::scheduled->value,
             ]);
         }
 
-        $platform = SocialMediaPlatform::query()->find($this->request->get('social_media_platform_id'));
+        $connectedAccountId = $this->request->get('connected_account_id');
+        $socialMediaPlatformId = $this->request->get('social_media_platform_id');
 
-        if (! $platform) {
-            throw new RuntimeException(__('Platform not found'));
+        if ($connectedAccountId) {
+            $this->platform = $this->request->get('social_media_platform');
+        } elseif ($socialMediaPlatformId) {
+            $platform = SocialMediaPlatform::query()->find($socialMediaPlatformId);
+
+            if (! $platform) {
+                throw new RuntimeException(__('Platform not found'));
+            }
+
+            $this->platform = $platform?->platform;
+        } else {
+            $this->platform = $this->request->get('social_media_platform');
         }
-
-        $this->platform = $platform?->platform;
 
         $isVideoOnlyPlatform = in_array($this->platform, [
             PlatformEnum::tiktok->value,
@@ -118,7 +133,6 @@ class SocialMediaPostUpdateRequest extends FormRequest
         $this->merge([
             'platform'                => $this->platform,
             'social_media_platform'   => $this->platform,
-            'status'                  => StatusEnum::scheduled->value,
             'is_personalized_content' => $this->request->has('is_personalized_content'),
         ]);
     }

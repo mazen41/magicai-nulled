@@ -16,16 +16,26 @@ class SocialMediaShareService
 
     public function storeBulk($data)
     {
-        $selectedUserPlatforms = $data['selectedUserPlatforms'];
+        $selectedUserPlatforms = $data['selectedUserPlatforms'] ?? [];
+        $connectedAccountId = $data['connected_account_id'] ?? null;
 
         $posts = [];
 
-        foreach ($selectedUserPlatforms as $selectedUserPlatform) {
+        if ($connectedAccountId) {
             $created = array_merge($data, [
-                'social_media_platform_id' => $selectedUserPlatform,
+                'connected_account_id' => $connectedAccountId,
+                'social_media_platform_id' => null,
             ]);
-
             $posts[] = SocialMediaPost::query()->create($created)->getKey();
+        } else {
+            foreach ($selectedUserPlatforms as $selectedUserPlatform) {
+                $created = array_merge($data, [
+                    'social_media_platform_id' => $selectedUserPlatform,
+                    'connected_account_id' => null,
+                ]);
+
+                $posts[] = SocialMediaPost::query()->create($created)->getKey();
+            }
         }
 
         return SocialMediaPost::query()->whereIn('id', $posts)->get();
@@ -38,6 +48,17 @@ class SocialMediaShareService
 
     public function update(SocialMediaPost $post, array $data): void
     {
+        $connectedAccountId = $data['connected_account_id'] ?? null;
+        $socialMediaPlatformId = $data['social_media_platform_id'] ?? null;
+
+        if ($connectedAccountId) {
+            $data['connected_account_id'] = $connectedAccountId;
+            $data['social_media_platform_id'] = null;
+        } elseif ($socialMediaPlatformId) {
+            $data['social_media_platform_id'] = $socialMediaPlatformId;
+            $data['connected_account_id'] = null;
+        }
+
         $post->update($data);
     }
 
