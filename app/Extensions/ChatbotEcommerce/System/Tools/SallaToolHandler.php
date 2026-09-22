@@ -34,6 +34,14 @@ class SallaToolHandler
 
     /**
      * Search products in Salla store.
+     *
+     * Salla Admin API v2 /products accepted params:
+     *   page, per_page, keyword, status, category_id, format
+     *
+     * NOTE: The API does NOT accept separate 'sort' and 'order' params.
+     * Sending them causes HTTP 422. The $orderby and $order arguments
+     * are accepted from Gemini's function call but intentionally not
+     * forwarded to Salla. Salla returns newest products by default.
      */
     private function getProducts(string $query = '', string $orderby = 'date', string $order = 'desc'): array
     {
@@ -45,26 +53,25 @@ class SallaToolHandler
             $params['keyword'] = $query;
         }
 
-        // Map orderby to Salla's sort options
-        $sortMap = [
-            'date' => 'created_at',
-            'price' => 'price',
-            'popularity' => 'orders_count',
-            'name' => 'name',
-        ];
-
-        $sortKey = $sortMap[$orderby] ?? 'created_at';
-        $params['sort'] = $sortKey;
-        $params['order'] = strtolower($order);
+        Log::info('Salla getProducts request', [
+            'params'  => $params,
+            'orderby' => $orderby,
+            'order'   => $order,
+        ]);
 
         try {
             $response = $this->apiClient->get('products', $params);
             $products = $this->formatProducts($response['data'] ?? []);
 
+            Log::info('Salla getProducts success', [
+                'count' => count($products),
+            ]);
+
             return ['products' => $products];
         } catch (\Exception $e) {
             Log::error('Salla getProducts error: ' . $e->getMessage(), [
                 'connection_id' => $this->connection->id,
+                'params'        => $params,
             ]);
 
             return ['products' => []];
