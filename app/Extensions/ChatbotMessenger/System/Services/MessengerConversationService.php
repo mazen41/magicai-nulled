@@ -105,20 +105,36 @@ class MessengerConversationService
             return;
         }
 
-        $response = $this->generateResponse($messageBody) ?? trans("Sorry, I can't answer right now.");
+        $result    = $this->generateResponseStructured($messageBody);
+        $response  = $result['text'] ?? trans("Sorry, I can't answer right now.");
+        $imageUrls = $result['image_urls'] ?? [];
 
         if (! $conversation->connect_agent_at && $chatbot->interaction_type === InteractionType::SMART_SWITCH && MarketplaceHelper::isRegistered('chatbot-agent')) {
             $response .= "\n\n\nTo speak with a live support agent, please enter the #{$this->humanAgentCommand} command.";
         }
 
         // Meta Messenger hard-rejects messages above 2000 chars — enforce a 1900-char safety cap
-        // after any suffix has been appended so the full string is always within limits.
         if (mb_strlen($response) > 1900) {
             $response = mb_substr($response, 0, 1897) . '...';
         }
 
+        // Send the text reply first
         $messenger->sendText($response, $recipient);
         $this->insertMessage($conversation, $response, 'assistant', $chatbot->ai_model);
+
+        // Then send product images one by one (Messenger requires separate messages per attachment)
+        foreach ($imageUrls as $imageUrl) {
+            $messenger->sendImage($imageUrl, $recipient);
+            // Small delay to respect Messenger's rate limits and preserve message order
+            usleep(300000); // 300ms
+        }
+
+        if (!empty($imageUrls)) {
+            Log::info('MessengerConversationService: sent product images', [
+                'recipient'   => $recipient,
+                'image_count' => count($imageUrls),
+            ]);
+        }
     }
 
     protected function sendUnsupportedMessageType(ChatbotConversation $conversation, Chatbot $chatbot, MessengerService $messenger, string $recipient): void
@@ -155,7 +171,18 @@ class MessengerConversationService
         return str_contains($message, $this->humanAgentCommand) && $chatbot->interaction_type === InteractionType::SMART_SWITCH;
     }
 
-    protected function generateResponse(string $prompt): ?string
+    /**
+     * Generate a response and return a structured result:
+     *   ['text' => string, 'image_urls' => string[]]
+     *
+     * When the generator returns an ecommerce carousel (AI text + HTML separated
+     * by the <!--ECOMMERCE_UI--> sentinel), we extract:
+     *   - the plain AI text (e.g. "I found 5 products for you. Take a look!")
+     *   - the product image URLs from the HTML carousel src attributes
+     *
+     * Everything else (knowledge base answers, plain text) goes through as-is.
+     */
+    protected function generateResponseStructured(string $prompt): array
     {
         $raw = app(GeneratorService::class)
             ->setChatbot($this->conversation->chatbot)
@@ -164,21 +191,60 @@ class MessengerConversationService
             ->generate();
 
         if ($raw === null) {
-            return null;
+            return ['text' => null, 'image_urls' => []];
         }
 
-        // Messenger only accepts plain text (max 2000 chars).
-        // Strip any HTML the generator may return (e.g. product carousel HTML).
-        $text = strip_tags($raw);
-        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = trim(preg_replace('/\s+/', ' ', $text));
+        $imageUrls = [];
 
-        // Hard-truncate to Messenger's 2000-char limit.
-        if (mb_strlen($text) > 1990) {
-            $text = mb_substr($text, 0, 1990) . '...';
+        // Check for the ecommerce sentinel that separates AI text from carousel HTML
+        if (str_contains($raw, '<!--ECOMMERCE_UI-->')) {
+            [$aiPart, $htmlPart] = explode('<!--ECOMMERCE_UI-->', $raw, 2);
+
+            // Clean the AI text part — it's already plain text from the generator
+            $text = strip_tags($aiPart);
+            $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $text = trim(preg_replace('/\s+/', ' ', $text));
+
+            // Extract product image URLs from the carousel HTML
+            // Matches: src="https://..." inside <img> tags
+            if (preg_match_all('/src=["\']([^"\'>]+)["\']/', $htmlPart, $matches)) {
+                foreach ($matches[1] as $url) {
+                    $url = trim($url);
+                    // Only real http(s) image URLs, skip data: URIs and empty
+                    if (str_starts_with($url, 'http') && !empty($url)) {
+                        $imageUrls[] = $url;
+                    }
+                }
+                // Cap at 5 images — Messenger rate-limits bursts
+                $imageUrls = array_slice(array_unique($imageUrls), 0, 5);
+            }
+
+            Log::info('MessengerConversationService: ecommerce response parsed', [
+                'text_preview'  => mb_substr($text, 0, 80),
+                'image_count'   => count($imageUrls),
+            ]);
+        } else {
+            // Plain text / knowledge base response — strip any incidental HTML
+            $text = strip_tags($raw);
+            $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $text = trim(preg_replace('/\s+/', ' ', $text));
         }
 
-        return $text ?: null;
+        // Hard-truncate to Messenger's 1900-char safety limit
+        if (mb_strlen($text) > 1900) {
+            $text = mb_substr($text, 0, 1897) . '...';
+        }
+
+        return [
+            'text'       => $text ?: null,
+            'image_urls' => $imageUrls,
+        ];
+    }
+
+    /** @deprecated Use generateResponseStructured() */
+    protected function generateResponse(string $prompt): ?string
+    {
+        return $this->generateResponseStructured($prompt)['text'];
     }
 
     public function insertMessage(ChatbotConversation $conversation, string $message, string $role, string $model, bool $forcePanelEvent = false)
