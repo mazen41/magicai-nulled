@@ -38,6 +38,7 @@
 			selected
 		>{{ __('Shopify') }}</option>
 		<option value="woocommerce">{{ __('WooCommerce') }}</option>
+		<option value="salla">{{ __('Salla') }}</option>
 	</x-forms.input>
 	<x-alert
 		class="rounde mt-4"
@@ -123,6 +124,28 @@
 		size="lg"
 		x-model="activeChatbot.woocommerce_consumer_secret"
 	/>
+</div>
+
+<div
+	x-show="activeChatbot.is_shop && activeChatbot.shop_source === 'salla'"
+	x-transition
+	x-init="activeChatbot"
+>
+	<x-forms.input
+		class:label="text-heading-foreground"
+		label="{{ __('Select Salla Account') }}"
+		name="salla_connection_id"
+		size="lg"
+		type="select"
+		x-model="activeChatbot.salla_connection_id"
+	>
+		<option value="">{{ __('Select a Salla account') }}</option>
+		@foreach ($sallaConnections as $connection)
+			<option value="{{ $connection->id }}">
+				{{ $connection->store_name }} ({{ $connection->store_domain }})
+			</option>
+		@endforeach
+	</x-forms.input>
 </div>
 
 <div

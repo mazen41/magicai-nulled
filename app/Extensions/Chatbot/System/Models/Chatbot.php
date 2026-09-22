@@ -104,6 +104,7 @@ class Chatbot extends Model
         'woocommerce_domain',
         'woocommerce_consumer_key',
         'woocommerce_consumer_secret',
+        'salla_connection_id',
     ];
 
     protected $appends = [
@@ -202,5 +203,10 @@ class Chatbot extends Model
     {
         return $this->belongsToMany(\App\Models\ConnectedAccount::class, 'chatbot_connected_accounts', 'chatbot_id', 'connected_account_id')
             ->withTimestamps();
+    }
+
+    public function sallaConnection(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\SallaConnection::class, 'salla_connection_id');
     }
 }

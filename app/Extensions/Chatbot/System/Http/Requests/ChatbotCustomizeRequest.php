@@ -90,6 +90,7 @@ class ChatbotCustomizeRequest extends FormRequest
             'woocommerce_domain'			              => ['sometimes', 'nullable', 'string'],
             'woocommerce_consumer_key'           => ['sometimes', 'nullable', 'string'],
             'woocommerce_consumer_secret'        => ['sometimes', 'nullable', 'string'],
+            'salla_connection_id'                 => ['sometimes', 'nullable', 'integer', 'exists:salla_connections,id'],
         ];
     }
 

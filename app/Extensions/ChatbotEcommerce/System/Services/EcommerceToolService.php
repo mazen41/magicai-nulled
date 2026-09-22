@@ -7,6 +7,7 @@ namespace App\Extensions\ChatbotEcommerce\System\Services;
 use App\Extensions\Chatbot\System\Models\Chatbot;
 use App\Extensions\ChatbotEcommerce\System\Tools\ShopifyToolHandler;
 use App\Extensions\ChatbotEcommerce\System\Tools\WooCommerceToolHandler;
+use App\Extensions\ChatbotEcommerce\System\Tools\SallaToolHandler;
 use Illuminate\Support\Facades\Log;
 
 class EcommerceToolService
@@ -158,6 +159,58 @@ class EcommerceToolService
                     }
 
                     return $getReview;
+            }
+        }
+
+        // Salla Tools
+        if (
+            $chatbot->is_shop &&
+            $chatbot->shop_source == 'salla' &&
+            $chatbot->sallaConnection &&
+            in_array($function, ['getProducts', 'getCategories', 'getOrders', 'searchProducts'])
+        ) {
+            $sallaToolHandler = new SallaToolHandler($chatbot->sallaConnection);
+
+            switch ($function) {
+                case 'getProducts':
+                case 'searchProducts':
+                    $query = $functionArgs['query'] ?? '';
+                    $orderby = $functionArgs['orderby'] ?? 'date';
+                    $order = $functionArgs['order'] ?? 'desc';
+
+                    $result = $sallaToolHandler->handleToolCall($function, [$query, $orderby, $order]);
+                    $products = $result['products'] ?? [];
+
+                    if (empty($products)) {
+                        return '<p>Didn\'t find a perfect match, but these could be just what you need!</p>' . strval($sallaToolHandler->parseProducts($products));
+                    }
+
+                    return strval($sallaToolHandler->parseProducts($products));
+                case 'getCategories':
+                    $result = $sallaToolHandler->handleToolCall('getCategories', []);
+                    $categories = $result['categories'] ?? [];
+
+                    if (empty($categories)) {
+                        return 'No categories available in your store.';
+                    }
+
+                    $categoryList = implode(', ', array_column($categories, 'name'));
+                    return "Available categories: {$categoryList}";
+                case 'getOrders':
+                    $status = $functionArgs['status'] ?? '';
+                    $result = $sallaToolHandler->handleToolCall('getOrders', [$status, 10]);
+                    $orders = $result['orders'] ?? [];
+
+                    if (empty($orders)) {
+                        return 'No orders found.';
+                    }
+
+                    $orderList = '';
+                    foreach ($orders as $order) {
+                        $orderList .= "Order #{$order['reference_id']} - Status: {$order['status']} - Total: {$order['total']} {$order['currency']}\n";
+                    }
+
+                    return $orderList;
             }
         }
 
@@ -314,6 +367,67 @@ class EcommerceToolService
             }
         }
 
+        // Salla Tools
+        if (
+            $chatbot->is_shop &&
+            $chatbot->shop_source == 'salla' &&
+            $chatbot->sallaConnection &&
+            in_array($function, ['getProducts', 'getCategories', 'getOrders', 'searchProducts'])
+        ) {
+            $sallaToolHandler = new SallaToolHandler($chatbot->sallaConnection);
+
+            switch ($function) {
+                case 'getProducts':
+                case 'searchProducts':
+                    $query = $functionArgs['query'] ?? '';
+                    $orderby = $functionArgs['orderby'] ?? 'date';
+                    $order = $functionArgs['order'] ?? 'desc';
+
+                    $result = $sallaToolHandler->handleToolCall($function, [$query, $orderby, $order]);
+                    $products = $result['products'] ?? [];
+                    $noExactMatch = false;
+
+                    if (empty($products)) {
+                        $noExactMatch = true;
+                    }
+
+                    return [
+                        'ai_content' => $noExactMatch
+                            ? "I couldn't find an exact match, but here are some products you might like!"
+                            : $this->productsToText($products),
+                        'ui' => strval($sallaToolHandler->parseProducts($products)),
+                    ];
+                case 'getCategories':
+                    $result = $sallaToolHandler->handleToolCall('getCategories', []);
+                    $categories = $result['categories'] ?? [];
+
+                    if (empty($categories)) {
+                        $message = 'No categories available in your store.';
+                    } else {
+                        $categoryList = implode(', ', array_column($categories, 'name'));
+                        $message = "Available categories: {$categoryList}";
+                    }
+
+                    return ['ai_content' => $message, 'ui' => null];
+                case 'getOrders':
+                    $status = $functionArgs['status'] ?? '';
+                    $result = $sallaToolHandler->handleToolCall('getOrders', [$status, 10]);
+                    $orders = $result['orders'] ?? [];
+
+                    if (empty($orders)) {
+                        $message = 'No orders found.';
+                    } else {
+                        $orderList = '';
+                        foreach ($orders as $order) {
+                            $orderList .= "Order #{$order['reference_id']} - Status: {$order['status']} - Total: {$order['total']} {$order['currency']}\n";
+                        }
+                        $message = $orderList;
+                    }
+
+                    return ['ai_content' => $message, 'ui' => null];
+            }
+        }
+
         return null;
     }
 
@@ -364,6 +478,12 @@ class EcommerceToolService
             }
         }
 
+        if ($chatbot->shop_source == 'salla') {
+            foreach ($this->getSallaDeclarations($chatbot) as $declaration) {
+                $tools[] = ['type' => 'function', 'function' => $declaration];
+            }
+        }
+
         return $tools;
     }
 
@@ -388,6 +508,12 @@ class EcommerceToolService
 
         if ($chatbot->shop_source == 'woocommerce') {
             foreach ($this->getWooCommerceDeclarations($chatbot) as $declaration) {
+                $tools[] = $this->toAnthropicFormat($declaration);
+            }
+        }
+
+        if ($chatbot->shop_source == 'salla') {
+            foreach ($this->getSallaDeclarations($chatbot) as $declaration) {
                 $tools[] = $this->toAnthropicFormat($declaration);
             }
         }
@@ -417,6 +543,12 @@ class EcommerceToolService
 
         if ($chatbot->shop_source == 'woocommerce') {
             foreach ($this->getWooCommerceDeclarations($chatbot) as $declaration) {
+                $declarations[] = $declaration;
+            }
+        }
+
+        if ($chatbot->shop_source == 'salla') {
+            foreach ($this->getSallaDeclarations($chatbot) as $declaration) {
                 $declarations[] = $declaration;
             }
         }
@@ -565,6 +697,83 @@ class EcommerceToolService
                 ],
             ];
         }
+
+        return $declarations;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function getSallaDeclarations(Chatbot $chatbot): array
+    {
+        $declarations = [];
+
+        $declarations[] = [
+            'name'        => 'getProducts',
+            'description' => 'Finds products in the Salla store based on a keyword or search query. This is useful when the user asks for products.',
+            'parameters'  => [
+                'type'       => 'object',
+                'properties' => [
+                    'query' => [
+                        'type'        => 'string',
+                        'description' => 'A concise search query for products.',
+                    ],
+                    'orderby' => [
+                        'type'        => 'string',
+                        'enum'        => ['date', 'price', 'popularity', 'name'],
+                        'description' => 'Determines how products should be sorted. Default is "date".',
+                        'default'     => 'date',
+                    ],
+                    'order' => [
+                        'type'        => 'string',
+                        'enum'        => ['asc', 'desc'],
+                        'description' => 'Specifies the sort direction. Default is "desc".',
+                        'default'     => 'desc',
+                    ],
+                ],
+                'required' => ['query'],
+            ],
+        ];
+
+        $declarations[] = [
+            'name'        => 'getCategories',
+            'description' => 'Retrieves product categories from the Salla store.',
+            'parameters'  => [
+                'type'       => 'object',
+                'properties' => [],
+                'required'   => [],
+            ],
+        ];
+
+        $declarations[] = [
+            'name'        => 'getOrders',
+            'description' => 'Retrieves orders from the Salla store. Can filter by status.',
+            'parameters'  => [
+                'type'       => 'object',
+                'properties' => [
+                    'status' => [
+                        'type'        => 'string',
+                        'description' => 'Filter orders by status (e.g., "completed", "pending"). Leave empty for all orders.',
+                    ],
+                ],
+                'required' => [],
+            ],
+        ];
+
+        $declarations[] = [
+            'name'        => 'searchProducts',
+            'description' => 'Searches for products in the Salla store by keyword.',
+            'parameters'  => [
+                'type'       => 'object',
+                'properties' => [
+                    'query' => [
+                        'type'        => 'string',
+                        'description' => 'Search query for products.',
+                    ],
+                ],
+                'required' => ['query'],
+            ],
+        ];
 
         return $declarations;
     }

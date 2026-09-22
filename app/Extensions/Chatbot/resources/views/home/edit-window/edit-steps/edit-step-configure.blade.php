@@ -544,7 +544,7 @@
 
         @includeIf('chatbot-voice-call::particles.chatbot-config')
 		@includeIf('chatbot-booking::particles.chatbot-config')
-		@includeIf('chatbot-ecommerce::particles.chatbot-config')
+		@includeIf('chatbot-ecommerce::particles.chatbot-config', ['sallaConnections' => $sallaConnections ?? []])
 
         @php
             use App\Domains\Engine\Enums\EngineEnum;

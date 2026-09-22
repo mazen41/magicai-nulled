@@ -91,7 +91,7 @@
                         name="id"
                         x-model="activeChatbot.id"
                     >
-                    @include('chatbot::home.edit-window.edit-steps.edit-step-configure')
+                    @include('chatbot::home.edit-window.edit-steps.edit-step-configure', ['sallaConnections' => $sallaConnections ?? []])
                     @include('chatbot::home.edit-window.edit-steps.edit-step-customize', ['avatars', $avatars])
                     @include('chatbot::home.edit-window.edit-steps.edit-step-train')
                     @include('chatbot::home.edit-window.edit-steps.edit-step-embed')

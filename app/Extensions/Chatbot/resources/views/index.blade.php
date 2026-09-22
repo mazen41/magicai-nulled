@@ -27,6 +27,9 @@
         'getCoupons' => 'Coupons',
         'getProductReviews' => 'Product Reviews',
     ];
+    $sallaConnections = \App\Models\SallaConnection::where('user_id', Auth::id())
+        ->where('connection_status', 'connected')
+        ->get(['id', 'store_name', 'store_domain']);
 @endphp
 
 @extends('panel.layout.app', ['disable_tblr' => true, 'disable_mobile_bottom_menu' => true])
@@ -63,7 +66,7 @@
 
             @include('chatbot::home.chatbots-list', ['chatbots' => $chatbots])
 
-            @include('chatbot::home.edit-window.edit-window', ['avatars' => $avatars])
+            @include('chatbot::home.edit-window.edit-window', ['avatars' => $avatars, 'sallaConnections' => $sallaConnections])
         </div>
 
         @include('chatbot::home.chats-history.chats-history')
