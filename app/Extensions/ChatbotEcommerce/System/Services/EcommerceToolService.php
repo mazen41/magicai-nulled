@@ -754,7 +754,7 @@ class EcommerceToolService
 
         $declarations[] = [
             'name'        => 'getCategories',
-            'description' => 'Retrieves product categories from the Salla store.',
+            'description' => 'Retrieves product categories from the Salla store. Use ONLY when the user explicitly asks about categories, departments, or product sections — NOT when they ask about products themselves. For product requests, always use getProducts first.',
             'parameters'  => [
                 'type'       => 'object',
                 'properties' => [],

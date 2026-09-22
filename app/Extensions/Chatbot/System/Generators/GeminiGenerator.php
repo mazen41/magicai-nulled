@@ -75,10 +75,25 @@ class GeminiGenerator extends Generator
                 'calls' => array_map(fn($c) => $c['functionCall']['name'] ?? 'unknown', $functionCalls),
             ]);
 
-            // Add assistant's function call to conversation
+            // Add assistant's function call to conversation.
+            // Strip 'thoughtSignature' — Gemini rejects it when echoed back.
+            // Ensure 'args' is always a JSON object, never an empty array.
+            $cleanedCalls = array_map(function (array $part) {
+                if (isset($part['functionCall'])) {
+                    unset($part['thoughtSignature']);
+                    $args = $part['functionCall']['args'] ?? [];
+                    // If args is an empty PHP array (not an associative array),
+                    // cast to stdClass so it serialises as '{}' not '[]'
+                    if (is_array($args) && empty($args)) {
+                        $part['functionCall']['args'] = new \stdClass();
+                    }
+                }
+                return $part;
+            }, $functionCalls);
+
             $contents[] = [
                 'role'  => 'model',
-                'parts' => $functionCalls,
+                'parts' => $cleanedCalls,
             ];
 
             $callAgain = false;
@@ -101,7 +116,7 @@ class GeminiGenerator extends Generator
                         $ecommerceAiContents[] = $ecommerceData['ai_content'];
                         $callAgain = true;
                         $contents[] = [
-                            'role'  => 'function',
+                            'role'  => 'user',
                             'parts' => [
                                 [
                                     'functionResponse' => [
@@ -133,7 +148,7 @@ class GeminiGenerator extends Generator
 
                     // Add function response
                     $contents[] = [
-                        'role'  => 'function',
+                        'role'  => 'user',
                         'parts' => [
                             [
                                 'functionResponse' => [
