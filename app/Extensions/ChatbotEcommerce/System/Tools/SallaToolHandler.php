@@ -140,30 +140,62 @@ class SallaToolHandler
         $products = [];
 
         foreach ($sallaProducts as $product) {
+            // Collect image URLs — Salla may return strings, arrays with 'url'/'src',
+            // or nested objects. Always extract a plain string URL.
             $images = [];
             if (!empty($product['images'])) {
                 foreach ($product['images'] as $image) {
-                    if (is_array($image)) {
-                        $images[] = $image['url'] ?? $image['src'] ?? null;
-                    } else {
+                    if (is_string($image) && !empty($image)) {
                         $images[] = $image;
+                    } elseif (is_array($image)) {
+                        $url = $image['url'] ?? $image['src'] ?? $image['original'] ?? null;
+                        if (is_string($url) && !empty($url)) {
+                            $images[] = $url;
+                        }
                     }
                 }
             }
 
-            // Format price
-            $price = $product['price']['amount'] ?? $product['price'] ?? '0';
-            $currency = $product['price']['currency_code'] ?? 'SAR';
+            // Also try the main image field (Salla sometimes puts it there)
+            if (empty($images) && !empty($product['image'])) {
+                $img = $product['image'];
+                if (is_string($img)) {
+                    $images[] = $img;
+                } elseif (is_array($img)) {
+                    $url = $img['url'] ?? $img['src'] ?? $img['original'] ?? null;
+                    if (is_string($url)) {
+                        $images[] = $url;
+                    }
+                }
+            }
+
+            // Format price — Salla price is usually ['amount' => 99.00, 'currency_code' => 'SAR']
+            $priceData = $product['price'] ?? [];
+            if (is_array($priceData)) {
+                $price    = $priceData['amount'] ?? '0';
+                $currency = $priceData['currency_code'] ?? 'SAR';
+            } else {
+                $price    = (string) $priceData;
+                $currency = 'SAR';
+            }
+
+            Log::debug('Salla formatProducts: raw product sample', [
+                'id'          => $product['id'] ?? null,
+                'name'        => $product['name'] ?? null,
+                'image_count' => count($images),
+                'has_options' => !empty($product['options']),
+                'has_variants'=> !empty($product['variations']),
+            ]);
 
             $products[] = [
-                'id' => (string) ($product['id'] ?? ''),
-                'title' => $product['name'] ?? 'Unknown',
-                'description' => strip_tags($product['description'] ?? ''),
-                'url' => $product['url'] ?? '',
-                'images' => array_filter($images),
-                'variants' => $this->formatVariants($product),
-                'options' => $this->formatOptions($product),
-                'price' => $price . ' ' . $currency,
+                'id'          => (string) ($product['id'] ?? ''),
+                'title'       => (string) ($product['name'] ?? 'Unknown'),
+                'description' => strip_tags((string) ($product['description'] ?? '')),
+                'url'         => (string) ($product['url'] ?? ''),
+                'images'      => $images,
+                'variants'    => $this->formatVariants($product),
+                'options'     => $this->formatOptions($product),
+                'price'       => $price . ' ' . $currency,
             ];
         }
 
@@ -193,6 +225,11 @@ class SallaToolHandler
 
     /**
      * Format product options.
+     *
+     * Salla option values may be plain strings OR objects like
+     * [{'id': 1, 'title': 'Red', 'display_value': '#FF0000'}, ...]
+     * The carousel view iterates values with {{ $value }}, so each
+     * entry must be a plain string.
      */
     private function formatOptions(array $product): array
     {
@@ -200,10 +237,31 @@ class SallaToolHandler
 
         if (!empty($product['options'])) {
             foreach ($product['options'] as $option) {
-                $options[] = [
-                    'name' => $option['name'] ?? '',
-                    'values' => $option['values'] ?? [],
-                ];
+                $rawValues = $option['values'] ?? [];
+                $values    = [];
+
+                foreach ($rawValues as $value) {
+                    if (is_string($value)) {
+                        $values[] = $value;
+                    } elseif (is_array($value)) {
+                        // Extract the human-readable label
+                        $label = $value['title']
+                            ?? $value['name']
+                            ?? $value['display_value']
+                            ?? $value['value']
+                            ?? null;
+                        if ($label !== null) {
+                            $values[] = (string) $label;
+                        }
+                    }
+                }
+
+                if (!empty($values)) {
+                    $options[] = [
+                        'name'   => (string) ($option['name'] ?? ''),
+                        'values' => $values,
+                    ];
+                }
             }
         }
 

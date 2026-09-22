@@ -39,7 +39,7 @@
                     >
                         <img
                             class="mb-3.5 mt-0 aspect-square rounded-t-xl object-cover object-center"
-                            src="{{ $product['images'][0] }}"
+                            src="{{ is_string($product['images'][0]) ? $product['images'][0] : '' }}"
                             alt="{{ $product['title'] }}"
                         >
                     </a>
@@ -99,27 +99,30 @@
                                 <div class="flex gap-3 overflow-x-auto">
                                     @foreach ($option['values'] as $value)
                                         @php
+                                            // Always work with a plain string — guard against any
+                                            // non-string slipping through the formatter.
+                                            $valueStr = is_string($value) ? $value : (string) ($value['title'] ?? $value['name'] ?? '');
                                             // Does any variant contain this option value?
-                                            $variant = collect($product['variants'])->first(function ($variant) use ($value) {
-                                                return str_contains($variant['title'], $value);
+                                            $variant = collect($product['variants'])->first(function ($variant) use ($valueStr) {
+                                                return str_contains($variant['title'], $valueStr);
                                             });
                                         @endphp
                                         @if ($variant)
                                             <button
                                                 class="lqd-ext-chatbot-product-variant-button {{ $loop->first ? 'selected' : '' }} min-w-fit rounded-lg border border-black/5 px-3 py-1.5 text-2xs font-medium transition-colors duration-200 [&.selected]:border-transparent [&.selected]:bg-primary [&.selected]:text-primary-foreground"
                                                 type="button"
-                                                @if ($shop_source === 'shopify') data-name="{{ $value }}"
+                                                @if ($shop_source === 'shopify') data-name="{{ $valueStr }}"
 												@else
-													data-name="{{ $option['name'] }}:{{ $value }}" @endif
-                                                aria-label="Select {{ $option['name'] }}: {{ $value }}"
+													data-name="{{ $option['name'] }}:{{ $valueStr }}" @endif
+                                                aria-label="Select {{ $option['name'] }}: {{ $valueStr }}"
                                                 @click.prevent="productSelectVariant('{{ $variant['id'] }}')"
                                             >
-                                                {{ $value }}
+                                                {{ $valueStr }}
                                             </button>
                                         @else
                                             <div
                                                 class="lqd-ext-chatbot-product-variant-button min-w-fit rounded-lg border border-black/5 px-3 py-2 text-xs font-medium opacity-35 transition-colors duration-200">
-                                                {{ $value }}
+                                                {{ $valueStr }}
                                             </div>
                                         @endif
                                     @endforeach
