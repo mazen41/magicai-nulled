@@ -535,21 +535,21 @@ class EcommerceToolService
 
         $declarations = [];
 
-        $declarations[] = $this->getProductsDeclaration();
+        $declarations[] = $this->toGeminiFormat($this->getProductsDeclaration());
 
         if (is_array($chatbot->shop_features) && in_array('getPaymentGateway', $chatbot->shop_features, true)) {
-            $declarations[] = $this->getPaymentGatewayDeclaration();
+            $declarations[] = $this->toGeminiFormat($this->getPaymentGatewayDeclaration());
         }
 
         if ($chatbot->shop_source == 'woocommerce') {
             foreach ($this->getWooCommerceDeclarations($chatbot) as $declaration) {
-                $declarations[] = $declaration;
+                $declarations[] = $this->toGeminiFormat($declaration);
             }
         }
 
         if ($chatbot->shop_source == 'salla') {
             foreach ($this->getSallaDeclarations($chatbot) as $declaration) {
-                $declarations[] = $declaration;
+                $declarations[] = $this->toGeminiFormat($declaration);
             }
         }
 
@@ -570,6 +570,48 @@ class EcommerceToolService
             'name'         => $declaration['name'],
             'description'  => $declaration['description'],
             'input_schema' => $declaration['parameters'],
+        ];
+    }
+
+    /**
+     * Convert an OpenAI-style function declaration to Gemini format.
+     * Converts type strings to uppercase and ensures proper schema structure.
+     *
+     * @param  array<string, mixed>  $declaration
+     *
+     * @return array<string, mixed>
+     */
+    private function toGeminiFormat(array $declaration): array
+    {
+        $parameters = $declaration['parameters'] ?? [];
+
+        // Convert types to uppercase
+        $parameters['type'] = isset($parameters['type']) ? strtoupper($parameters['type']) : 'OBJECT';
+
+        // Convert property types to uppercase and ensure properties is an object/map
+        if (isset($parameters['properties']) && is_array($parameters['properties'])) {
+            $propertiesObject = new \stdClass();
+            foreach ($parameters['properties'] as $paramName => $paramDef) {
+                if (isset($paramDef['type'])) {
+                    $paramDef['type'] = strtoupper($paramDef['type']);
+                }
+                $propertiesObject->{$paramName} = $paramDef;
+            }
+            $parameters['properties'] = $propertiesObject;
+        } else {
+            // Ensure properties is always an object, even if empty
+            $parameters['properties'] = new \stdClass();
+        }
+
+        // Ensure required is an array
+        if (!isset($parameters['required'])) {
+            $parameters['required'] = [];
+        }
+
+        return [
+            'name'        => $declaration['name'],
+            'description' => $declaration['description'],
+            'parameters'  => $parameters,
         ];
     }
 
