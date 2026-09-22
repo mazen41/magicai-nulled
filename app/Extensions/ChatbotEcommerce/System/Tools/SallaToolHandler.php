@@ -126,14 +126,6 @@ class SallaToolHandler
     }
 
     /**
-     * Search products by keyword (alias for getProducts).
-     */
-    private function searchProducts(string $query): array
-    {
-        return $this->getProducts($query);
-    }
-
-    /**
      * Format Salla products to match Shopify/WooCommerce structure.
      */
     private function formatProducts(array $sallaProducts): array

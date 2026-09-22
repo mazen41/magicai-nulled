@@ -167,13 +167,12 @@ class EcommerceToolService
             $chatbot->is_shop &&
             $chatbot->shop_source == 'salla' &&
             $chatbot->sallaConnection &&
-            in_array($function, ['getProducts', 'getCategories', 'getOrders', 'searchProducts'])
+            in_array($function, ['getProducts', 'getCategories', 'getOrders'])
         ) {
             $sallaToolHandler = new SallaToolHandler($chatbot->sallaConnection);
 
             switch ($function) {
                 case 'getProducts':
-                case 'searchProducts':
                     $query = $functionArgs['query'] ?? '';
                     $orderby = $functionArgs['orderby'] ?? 'date';
                     $order = $functionArgs['order'] ?? 'desc';
@@ -372,13 +371,12 @@ class EcommerceToolService
             $chatbot->is_shop &&
             $chatbot->shop_source == 'salla' &&
             $chatbot->sallaConnection &&
-            in_array($function, ['getProducts', 'getCategories', 'getOrders', 'searchProducts'])
+            in_array($function, ['getProducts', 'getCategories', 'getOrders'])
         ) {
             $sallaToolHandler = new SallaToolHandler($chatbot->sallaConnection);
 
             switch ($function) {
                 case 'getProducts':
-                case 'searchProducts':
                     $query = $functionArgs['query'] ?? '';
                     $orderby = $functionArgs['orderby'] ?? 'date';
                     $order = $functionArgs['order'] ?? 'desc';
@@ -750,32 +748,9 @@ class EcommerceToolService
     {
         $declarations = [];
 
-        $declarations[] = [
-            'name'        => 'getProducts',
-            'description' => 'Finds products in the Salla store based on a keyword or search query. This is useful when the user asks for products.',
-            'parameters'  => [
-                'type'       => 'object',
-                'properties' => [
-                    'query' => [
-                        'type'        => 'string',
-                        'description' => 'A concise search query for products.',
-                    ],
-                    'orderby' => [
-                        'type'        => 'string',
-                        'enum'        => ['date', 'price', 'popularity', 'name'],
-                        'description' => 'Determines how products should be sorted. Default is "date".',
-                        'default'     => 'date',
-                    ],
-                    'order' => [
-                        'type'        => 'string',
-                        'enum'        => ['asc', 'desc'],
-                        'description' => 'Specifies the sort direction. Default is "desc".',
-                        'default'     => 'desc',
-                    ],
-                ],
-                'required' => ['query'],
-            ],
-        ];
+        // Note: getProducts is registered via the generic getProductsDeclaration()
+        // and routed to SallaToolHandler based on shop_source='salla'
+        // searchProducts is a duplicate of getProducts, so we don't register it
 
         $declarations[] = [
             'name'        => 'getCategories',
@@ -799,21 +774,6 @@ class EcommerceToolService
                     ],
                 ],
                 'required' => [],
-            ],
-        ];
-
-        $declarations[] = [
-            'name'        => 'searchProducts',
-            'description' => 'Searches for products in the Salla store by keyword.',
-            'parameters'  => [
-                'type'       => 'object',
-                'properties' => [
-                    'query' => [
-                        'type'        => 'string',
-                        'description' => 'Search query for products.',
-                    ],
-                ],
-                'required' => ['query'],
             ],
         ];
 
