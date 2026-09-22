@@ -127,10 +127,13 @@ class SallaOAuthController extends Controller
                 $connection = $this->oauthService->createConnection($user, $tokens, $userInfo);
 
                 // Also create ConnectedAccount record for unified integrations
+                // Use salla_store_id if available, otherwise use connection ID as fallback
+                $accountIdentifier = $connection->salla_store_id ?? (string) $connection->id;
+
                 app(\App\Services\OAuth\ConnectedAccountService::class)->createOrUpdate(
                     user:              $user,
                     platform:          'salla',
-                    accountIdentifier: $connection->salla_store_id,
+                    accountIdentifier: $accountIdentifier,
                     accessToken:       $tokens['access_token'],
                     accountData: [
                         'name'     => $connection->store_name,
