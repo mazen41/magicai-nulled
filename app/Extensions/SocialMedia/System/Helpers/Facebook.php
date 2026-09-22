@@ -84,7 +84,15 @@ class Facebook extends BaseMetaHelper
 
     public function publishTextOnPage(int $pageId, string $text): Response
     {
-        return Http::withToken($this->accessToken)
+        \Log::info('[FACEBOOK PUBLISH] Calling Facebook Graph API', [
+            'endpoint' => $pageId . '/feed',
+            'method' => 'POST',
+            'page_id' => $pageId,
+            'has_token' => !empty($this->accessToken),
+            'message_length' => strlen($text),
+        ]);
+
+        $response = Http::withToken($this->accessToken)
             ->acceptJson()
             ->post(
                 $this->apiUrl($pageId . '/feed'),
@@ -92,6 +100,26 @@ class Facebook extends BaseMetaHelper
                     'message' => $text,
                 ]
             );
+
+        \Log::info('[FACEBOOK PUBLISH] Graph API response', [
+            'http_status' => $response->status(),
+            'successful' => $response->successful(),
+            'has_body' => !empty($response->body()),
+            'json_keys' => array_keys($response->json() ?? []),
+        ]);
+
+        if (!$response->successful()) {
+            \Log::error('[FACEBOOK PUBLISH] Graph API failed', [
+                'http_status' => $response->status(),
+                'error' => $response->json(),
+            ]);
+        } else {
+            \Log::info('[FACEBOOK PUBLISH] Graph API success', [
+                'response_id' => $response->json('id'),
+            ]);
+        }
+
+        return $response;
     }
 
     public function publishPhotoOnPage(int $pageId, string $text, array $photos): Response

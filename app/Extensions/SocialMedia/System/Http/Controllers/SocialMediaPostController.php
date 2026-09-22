@@ -144,6 +144,14 @@ class SocialMediaPostController extends Controller
 
     public function store(SocialMediaPostStoreRequest $request): JsonResponse
     {
+        \Log::info('[POST NOW] Controller entered', [
+            'user_id' => Auth::id(),
+            'post_now' => $request->get('post_now'),
+            'connected_account_id' => $request->get('connected_account_id'),
+            'social_media_platform' => $request->get('social_media_platform'),
+            'content_length' => strlen($request->get('content', '')),
+        ]);
+
         if (Helper::appIsDemo()) {
             return response()->json([
                 'status'  => 'error',
@@ -153,17 +161,74 @@ class SocialMediaPostController extends Controller
 
         $validated = $request->validated();
 
+        \Log::info('[POST NOW] Calling SocialMediaShareService', [
+            'validated_keys' => array_keys($validated),
+            'post_now' => $request->get('post_now'),
+        ]);
+
         $posts = $this->service->storeBulk($validated);
 
-        if ($request->get('post_now')) {
-            foreach ($posts as $post) {
-                $driver = app(PublisherDriver::class)->setPost($post)
-                    ->getDriver();
+        \Log::info('[POST NOW] SocialMediaShareService returned', [
+            'post_count' => count($posts),
+            'post_ids' => $posts->pluck('id')->toArray(),
+        ]);
 
-                if ($driver instanceof BasePublisherService) {
-                    $driver->publish();
+        if ($request->get('post_now')) {
+            \Log::info('[POST NOW] Dispatching PublisherDriver for immediate publish');
+
+            foreach ($posts as $post) {
+                \Log::info('[POST NOW] Processing post', [
+                    'post_id' => $post->id,
+                    'connected_account_id' => $post->connected_account_id,
+                    'social_media_platform_id' => $post->social_media_platform_id,
+                    'status' => $post->status,
+                ]);
+
+                try {
+                    $driver = app(PublisherDriver::class)->setPost($post)
+                        ->getDriver();
+
+                    \Log::info('[POST NOW] PublisherDriver returned', [
+                        'driver_class' => get_class($driver),
+                        'is_base_publisher' => $driver instanceof BasePublisherService,
+                    ]);
+
+                    if ($driver instanceof BasePublisherService) {
+                        \Log::info('[POST NOW] Calling driver->publish()');
+                        $driver->publish();
+                        \Log::info('[POST NOW] driver->publish() completed');
+                    } else {
+                        \Log::warning('[POST NOW] Driver is not BasePublisherService instance');
+                    }
+
+                    $post->refresh();
+                    \Log::info('[POST NOW] Final post state', [
+                        'post_id' => $post->id,
+                        'status' => $post->status,
+                        'published_at' => $post->published_at,
+                        'scheduled_at' => $post->scheduled_at,
+                        'post_id_external' => $post->post_id,
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('[POST NOW] PublisherDriver exception', [
+                        'exception' => get_class($e),
+                        'message' => $e->getMessage(),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                    ]);
+
+                    $post->refresh();
+                    \Log::info('[POST NOW] Final post state after exception', [
+                        'post_id' => $post->id,
+                        'status' => $post->status,
+                        'published_at' => $post->published_at,
+                        'scheduled_at' => $post->scheduled_at,
+                        'post_id_external' => $post->post_id,
+                    ]);
                 }
             }
+        } else {
+            \Log::info('[POST NOW] NOT dispatching PublisherDriver (post_now is false/missing)');
         }
 
         return response()->json(['status' => 'success', 'message' => trans('Post created successfully')]);
@@ -171,6 +236,15 @@ class SocialMediaPostController extends Controller
 
     public function update(SocialMediaPostUpdateRequest $request, SocialMediaPost $post): JsonResponse
     {
+        \Log::info('[POST NOW UPDATE] Controller entered', [
+            'post_id' => $post->id,
+            'user_id' => Auth::id(),
+            'post_now' => $request->get('post_now'),
+            'connected_account_id' => $request->get('connected_account_id'),
+            'social_media_platform' => $request->get('social_media_platform'),
+            'content_length' => strlen($request->get('content', '')),
+        ]);
+
         if (Helper::appIsDemo()) {
             return response()->json([
                 'status'  => 'error',
@@ -180,12 +254,65 @@ class SocialMediaPostController extends Controller
 
         $validated = $request->validated();
 
+        \Log::info('[POST NOW UPDATE] Calling SocialMediaShareService update', [
+            'validated_keys' => array_keys($validated),
+            'post_now' => $request->get('post_now'),
+        ]);
+
         $this->service->update($post, $validated);
 
+        \Log::info('[POST NOW UPDATE] SocialMediaShareService update completed', [
+            'post_id' => $post->id,
+            'status' => $post->status,
+        ]);
+
         if ($request->get('post_now')) {
-            app(PublisherDriver::class)->setPost($post)
-                ->getDriver()
-                ->publish();
+            \Log::info('[POST NOW UPDATE] Dispatching PublisherDriver for immediate publish');
+
+            try {
+                $driver = app(PublisherDriver::class)->setPost($post)
+                    ->getDriver();
+
+                \Log::info('[POST NOW UPDATE] PublisherDriver returned', [
+                    'driver_class' => get_class($driver),
+                    'is_base_publisher' => $driver instanceof BasePublisherService,
+                ]);
+
+                if ($driver instanceof BasePublisherService) {
+                    \Log::info('[POST NOW UPDATE] Calling driver->publish()');
+                    $driver->publish();
+                    \Log::info('[POST NOW UPDATE] driver->publish() completed');
+                } else {
+                    \Log::warning('[POST NOW UPDATE] Driver is not BasePublisherService instance');
+                }
+
+                $post->refresh();
+                \Log::info('[POST NOW UPDATE] Final post state', [
+                    'post_id' => $post->id,
+                    'status' => $post->status,
+                    'published_at' => $post->published_at,
+                    'scheduled_at' => $post->scheduled_at,
+                    'post_id_external' => $post->post_id,
+                ]);
+            } catch (\Exception $e) {
+                \Log::error('[POST NOW UPDATE] PublisherDriver exception', [
+                    'exception' => get_class($e),
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]);
+
+                $post->refresh();
+                \Log::info('[POST NOW UPDATE] Final post state after exception', [
+                    'post_id' => $post->id,
+                    'status' => $post->status,
+                    'published_at' => $post->published_at,
+                    'scheduled_at' => $post->scheduled_at,
+                    'post_id_external' => $post->post_id,
+                ]);
+            }
+        } else {
+            \Log::info('[POST NOW UPDATE] NOT dispatching PublisherDriver (post_now is false/missing)');
         }
 
         return response()->json(['status' => 'success', 'message' => trans('Post updated successfully')]);

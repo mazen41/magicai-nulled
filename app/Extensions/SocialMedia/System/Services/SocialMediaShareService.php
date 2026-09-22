@@ -16,18 +16,33 @@ class SocialMediaShareService
 
     public function storeBulk($data)
     {
+        \Log::info('[POST NOW] SocialMediaShareService entered', [
+            'has_connected_account_id' => isset($data['connected_account_id']),
+            'has_selected_user_platforms' => isset($data['selectedUserPlatforms']),
+            'status' => $data['status'] ?? 'not_set',
+            'post_now' => $data['post_now'] ?? false,
+        ]);
+
         $selectedUserPlatforms = $data['selectedUserPlatforms'] ?? [];
         $connectedAccountId = $data['connected_account_id'] ?? null;
 
         $posts = [];
 
         if ($connectedAccountId) {
+            \Log::info('[POST NOW] Creating post with ConnectedAccount', [
+                'connected_account_id' => $connectedAccountId,
+            ]);
+
             $created = array_merge($data, [
                 'connected_account_id' => $connectedAccountId,
                 'social_media_platform_id' => null,
             ]);
             $posts[] = SocialMediaPost::query()->create($created)->getKey();
         } else {
+            \Log::info('[POST NOW] Creating post with SocialMediaPlatform', [
+                'platform_count' => count($selectedUserPlatforms),
+            ]);
+
             foreach ($selectedUserPlatforms as $selectedUserPlatform) {
                 $created = array_merge($data, [
                     'social_media_platform_id' => $selectedUserPlatform,
@@ -38,7 +53,15 @@ class SocialMediaShareService
             }
         }
 
-        return SocialMediaPost::query()->whereIn('id', $posts)->get();
+        $postModels = SocialMediaPost::query()->whereIn('id', $posts)->get();
+
+        \Log::info('[POST NOW] SocialMediaPost saved', [
+            'post_count' => count($postModels),
+            'post_ids' => $postModels->pluck('id')->toArray(),
+            'post_statuses' => $postModels->pluck('status')->toArray(),
+        ]);
+
+        return $postModels;
     }
 
     public function store($data)

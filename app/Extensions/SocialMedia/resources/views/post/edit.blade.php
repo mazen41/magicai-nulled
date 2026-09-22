@@ -1172,9 +1172,23 @@
                             formData.set('images', JSON.stringify([selectedImage]));
                             formData.set('image', selectedImage);
                         }
+
+                        console.log('[POST NOW EDIT] Starting', {
+                            postId: '{{ $editingPost->id }}',
+                            connectedAccountId: this.connectedAccountId,
+                            platform: this.currentPlatform,
+                            postNow: true,
+                            contentLength: this.content?.length,
+                            hasImage: !!this.image,
+                            imageCount: this.images?.length
+                        });
+
+                        const requestUrl = "{{ route('dashboard.user.social-media.post.update', $editingPost->id) }}";
+                        console.log('[POST NOW EDIT] Request URL:', requestUrl);
+
                         try {
                             let response = await fetch(
-                                "{{ route('dashboard.user.social-media.post.update', $editingPost->id) }}", {
+                                requestUrl, {
                                     method: "POST",
                                     headers: {
                                         "X-CSRF-TOKEN": document.querySelector(
@@ -1185,7 +1199,11 @@
                                     body: formData
                                 });
 
+                            console.log('[POST NOW EDIT] Response HTTP Status:', response.status);
+
                             let result = await response.json();
+
+                            console.log('[POST NOW EDIT] Response:', result);
 
                             if (result.status === 'success') {
                                 toastr.success(result.message);
@@ -1193,7 +1211,7 @@
                                 toastr.error(result.message);
                             }
                         } catch (error) {
-                            console.error("Error:", error);
+                            console.error('[POST NOW EDIT] Error:', error);
                         } finally {
                             this.isPosting = false;
                         }

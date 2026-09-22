@@ -28,7 +28,18 @@ class BasePublisherService
     #[NoReturn]
     public function publish(): void
     {
+        \Log::info('[BASE PUBLISHER] Entered', [
+            'post_id' => $this->post->id,
+            'status' => $this->post->status,
+            'platform' => $this->platform->getPlatform(),
+        ]);
+
         $this->credentials = $this->platform->getCredentials();
+
+        \Log::info('[BASE PUBLISHER] Credentials loaded', [
+            'has_access_token' => !empty(data_get($this->credentials, 'access_token')),
+            'has_platform_id' => !empty(data_get($this->credentials, 'platform_id')),
+        ]);
 
         $accessToken = data_get($this->credentials, 'access_token');
 
@@ -38,14 +49,26 @@ class BasePublisherService
 
         $this->setPlatformId($platformId);
 
+        \Log::info('[BASE PUBLISHER] Calling check()');
+
         if ($this->check()) {
+            \Log::warning('[BASE PUBLISHER] check() returned true, aborting publish');
             return;
         }
 
+        \Log::info('[BASE PUBLISHER] check() passed, calling platform handle()');
+
         if ($response = $this->handle()) {
+            \Log::info('[BASE PUBLISHER] handle() returned response', [
+                'response_type' => gettype($response),
+            ]);
+
             $this->setPublishResponse($response);
 
+            \Log::info('[BASE PUBLISHER] Calling finish()');
             $this->finish();
+        } else {
+            \Log::error('[BASE PUBLISHER] handle() returned false/null');
         }
     }
 
@@ -191,7 +214,17 @@ class BasePublisherService
 
     public function check(): bool
     {
+        \Log::info('[BASE PUBLISHER] check() called', [
+            'post_status' => $this->post->status,
+            'expected_status' => StatusEnum::scheduled->value,
+            'platform_connected' => $this->platform->isConnected(),
+        ]);
+
         if ($this->post->status !== StatusEnum::scheduled) {
+            \Log::error('[BASE PUBLISHER] check() failed: post is not scheduled', [
+                'current_status' => $this->post->status,
+                'required_status' => StatusEnum::scheduled->value,
+            ]);
 
             SocialMediaSharedLog::query()->create([
                 'social_media_post_id' => $this->post->id,
@@ -206,6 +239,7 @@ class BasePublisherService
         }
 
         if (! $this->platform->isConnected()) {
+            \Log::error('[BASE PUBLISHER] check() failed: platform not connected');
 
             $this->post->update([
                 'status' => StatusEnum::failed,
@@ -222,6 +256,8 @@ class BasePublisherService
 
             return true;
         }
+
+        \Log::info('[BASE PUBLISHER] check() passed');
 
         return false;
     }

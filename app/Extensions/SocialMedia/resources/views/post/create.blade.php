@@ -1228,9 +1228,22 @@
                             formData.set('images', JSON.stringify([selectedImage]));
                             formData.set('image', selectedImage);
                         }
+
+                        console.log('[POST NOW] Starting', {
+                            connectedAccountId: this.connectedAccountId,
+                            platform: this.currentPlatform,
+                            postNow: true,
+                            contentLength: this.content?.length,
+                            hasImage: !!this.image,
+                            imageCount: this.images?.length
+                        });
+
+                        const requestUrl = "{{ route('dashboard.user.social-media.post.store') }}";
+                        console.log('[POST NOW] Request URL:', requestUrl);
+
                         try {
                             let response = await fetch(
-                                "{{ route('dashboard.user.social-media.post.store') }}", {
+                                requestUrl, {
                                     method: "POST",
                                     headers: {
                                         "X-CSRF-TOKEN": document.querySelector(
@@ -1241,7 +1254,11 @@
                                     body: formData
                                 });
 
+                            console.log('[POST NOW] Response HTTP Status:', response.status);
+
                             let result = await response.json();
+
+                            console.log('[POST NOW] Response:', result);
 
                             if (result.status === 'success') {
                                 toastr.success(result.message);
@@ -1253,7 +1270,7 @@
                                 toastr.error(result.message);
                             }
                         } catch (error) {
-                            console.error("Error:", error);
+                            console.error('[POST NOW] Error:', error);
                         } finally {
                             this.isPosting = false;
                         }
