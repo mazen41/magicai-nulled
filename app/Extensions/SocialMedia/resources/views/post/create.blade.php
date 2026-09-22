@@ -98,11 +98,23 @@
 
                     @foreach ($all_platforms as $platform)
                         @php
-                            $is_connected = $platform->platform()?->isConnected();
+                            $is_connected = false;
+                            $name = 'Unknown';
+                            $profileImage = custom_theme_url('/assets/img/avatars/avatar-1.jpg');
 
-                            $name = $platform->platform()?->credentials['name'] ?? 'John Doe';
-
-                            $profileImage = $platform->platform()?->credentials['picture'] ?? custom_theme_url('/assets/img/avatars/avatar-1.jpg');
+                            $connectedAccount = $connectedAccounts->firstWhere('platform', $platform->value);
+                            if ($connectedAccount) {
+                                $is_connected = true;
+                                $name = $connectedAccount->getDisplayName();
+                                $profileImage = $connectedAccount->account_avatar ?? custom_theme_url('/assets/img/avatars/avatar-1.jpg');
+                            } elseif ($platform->platform()) {
+                                $legacyPlatform = $platform->platform();
+                                if ($legacyPlatform->isConnected()) {
+                                    $is_connected = true;
+                                    $name = $legacyPlatform->credentials['name'] ?? $legacyPlatform->username() ?? 'Unknown';
+                                    $profileImage = $legacyPlatform->credentials['picture'] ?? custom_theme_url('/assets/img/avatars/avatar-1.jpg');
+                                }
+                            }
                         @endphp
 
                         <x-button
@@ -113,7 +125,7 @@
                             type="button"
                             variant="outline"
                             ::class="{ active: currentPlatform === '{{ $platform->value }}' && {{ $is_connected ? 1 : 0 }} }"
-                            @click.prevent="currentPlatform = '{{ $platform->value }}'; platformUsername = '{{ $name }}'; platformPicture = '{!! $profileImage !!}';socialMediaPlatformId = '{{ $platform->platform()?->id }}';"
+                            @click.prevent="currentPlatform = '{{ $platform->value }}'; platformUsername = '{{ $name }}'; platformPicture = '{!! $profileImage !!}';socialMediaPlatformId = '{{ $platform->platform()?->id }}'; connectedAccountId = '{{ $connectedAccount?->id ?? '' }}';"
                             :disabled="!$is_connected"
                         >
                             @php
@@ -1034,6 +1046,7 @@
                     campaigns: @json($campaigns_list),
                     tone: '{{ $tone }}',
                     socialMediaPlatformId: '{{ $social_media_platform_id }}',
+                    connectedAccountId: '',
                     isStory: false,
                     generatingImage: false,
                     generatingVideo: false,

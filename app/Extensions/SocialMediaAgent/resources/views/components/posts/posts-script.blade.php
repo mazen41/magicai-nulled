@@ -680,6 +680,12 @@
                         url,
                         taskKey
                     });
+
+                    if (!data || !data.posts || !data.posts.data) {
+                        sidedrawer.sidedrawerOpen = false;
+                        return;
+                    }
+
                     const post = data.posts.data[0];
 
                     if (!post) {

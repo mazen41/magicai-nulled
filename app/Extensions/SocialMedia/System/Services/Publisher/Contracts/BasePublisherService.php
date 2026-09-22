@@ -28,7 +28,7 @@ class BasePublisherService
     #[NoReturn]
     public function publish(): void
     {
-        $this->credentials = $this->platform->credentials;
+        $this->credentials = $this->platform->getCredentials();
 
         $accessToken = data_get($this->credentials, 'access_token');
 
@@ -64,7 +64,7 @@ class BasePublisherService
 
         if ($response instanceof Response) {
             if ($response->successful()) {
-                $publishId = match ($this->platform->platform) {
+                $publishId = match ($this->platform->getPlatform()) {
                     'linkedin' => $response->header('x-restli-id'),
                     'tiktok'   => $response->json('data.id'),
                     'x'        => $response->json('data.id'),
@@ -94,7 +94,7 @@ class BasePublisherService
 
                 $isPublished = true;
             } else {
-                $error = match ($this->platform->platform) {
+                $error = match ($this->platform->getPlatform()) {
                     'facebook'  => $response->json('error.message'),
                     'instagram' => $response->json('error.error_user_msg'),
                     'x'         => $response->json('title'),

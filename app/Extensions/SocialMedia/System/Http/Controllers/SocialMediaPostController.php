@@ -14,6 +14,7 @@ use App\Extensions\SocialMedia\System\Services\SocialMediaShareService;
 use App\Helpers\Classes\Helper;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
+use App\Models\ConnectedAccount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -77,32 +78,46 @@ class SocialMediaPostController extends Controller
             ->connected()
             ->get();
 
+        $connectedAccounts = ConnectedAccount::query()
+            ->where('user_id', Auth::id())
+            ->where('connection_status', 'connected')
+            ->get();
+
         return view('social-media::post.create', [
-            'companies'       => Company::query()->where('user_id', Auth::id())->get(),
-            'campaigns'       => SocialMediaCampaign::query()->where('user_id', Auth::id())->get(),
-            'platforms'       => PlatformEnum::all(),
-            'currentPlatform' => $currentPlatform,
-            'userPlatforms'   => $userPlatforms,
-            'prefillVideo'    => $request->get('prefill_video'),
-            'prefillContent'  => $request->get('prefill_content'),
+            'companies'          => Company::query()->where('user_id', Auth::id())->get(),
+            'campaigns'          => SocialMediaCampaign::query()->where('user_id', Auth::id())->get(),
+            'platforms'          => PlatformEnum::all(),
+            'currentPlatform'     => $currentPlatform,
+            'userPlatforms'       => $userPlatforms,
+            'connectedAccounts'   => $connectedAccounts,
+            'prefillVideo'       => $request->get('prefill_video'),
+            'prefillContent'      => $request->get('prefill_content'),
         ]);
     }
 
     public function edit(SocialMediaPost $post)
     {
+        $post->load('connectedAccount');
+
         $userPlatforms = SocialMediaPlatform::query()
             ->where('platform', $post->social_media_platform)
             ->where('user_id', Auth::id())
             ->connected()
             ->get();
 
+        $connectedAccounts = ConnectedAccount::query()
+            ->where('user_id', Auth::id())
+            ->where('connection_status', 'connected')
+            ->get();
+
         return view('social-media::post.edit', [
-            'companies'       => Company::query()->where('user_id', Auth::id())->get(),
-            'campaigns'       => SocialMediaCampaign::query()->where('user_id', Auth::id())->get(),
-            'platforms'       => PlatformEnum::all(),
-            'currentPlatform' => $post->social_media_platform,
-            'editingPost'     => $post,
-            'userPlatforms'   => $userPlatforms,
+            'companies'          => Company::query()->where('user_id', Auth::id())->get(),
+            'campaigns'          => SocialMediaCampaign::query()->where('user_id', Auth::id())->get(),
+            'platforms'          => PlatformEnum::all(),
+            'currentPlatform'     => $post->social_media_platform,
+            'editingPost'         => $post,
+            'userPlatforms'       => $userPlatforms,
+            'connectedAccounts'   => $connectedAccounts,
         ]);
     }
 

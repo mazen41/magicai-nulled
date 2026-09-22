@@ -33,10 +33,17 @@
     $companies_list = $companies->pluck('name', 'id')->toArray();
     $campaigns_list = $campaigns->pluck('name', 'id')->toArray();
 
-    $credentials = $currentPlatform->platform()?->credentials;
+    $platformUsername = '';
+    $platformPicture = '';
 
-    $platformUsername = $credentials['name'] ?? '';
-    $platformPicture = $credentials['picture'] ?? '';
+    if ($editingPost->connectedAccount) {
+        $platformUsername = $editingPost->connectedAccount->getDisplayName();
+        $platformPicture = $editingPost->connectedAccount->account_avatar ?? custom_theme_url('/assets/img/avatars/avatar-1.jpg');
+    } elseif ($currentPlatform->platform()) {
+        $credentials = $currentPlatform->platform()->credentials;
+        $platformUsername = $credentials['name'] ?? $credentials['username'] ?? '';
+        $platformPicture = $credentials['picture'] ?? '';
+    }
 
     $all_platforms = \App\Extensions\SocialMedia\System\Enums\PlatformEnum::cases();
     $imageLimits = collect(config('social-media'))->mapWithKeys(fn($v, $k) => [$k => data_get($v, 'requirements.images.limit', 1)])->toArray();
@@ -996,6 +1003,7 @@
                     campaigns: @json($campaigns_list),
                     tone: '{{ $tone }}',
                     socialMediaPlatformId: '{{ $social_media_platform_id }}',
+                    connectedAccountId: '{{ $editingPost->connected_account_id ?? '' }}',
                     isStory: false,
                     generatingImage: false,
                     generatingVideo: false,
