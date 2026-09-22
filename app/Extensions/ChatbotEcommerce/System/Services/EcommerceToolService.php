@@ -173,12 +173,21 @@ class EcommerceToolService
 
             switch ($function) {
                 case 'getProducts':
-                    $query = $functionArgs['query'] ?? '';
-                    $orderby = $functionArgs['orderby'] ?? 'date';
-                    $order = $functionArgs['order'] ?? 'desc';
+                    $rawQuery = $functionArgs['query'] ?? '';
+                    $orderby  = $functionArgs['orderby'] ?? 'popularity';
+                    $order    = $functionArgs['order'] ?? 'desc';
 
-                    $result = $sallaToolHandler->handleToolCall($function, [$query, $orderby, $order]);
+                    // Strip generic catalog words — Salla returns 0 for them
+                    $keyword = $this->sanitizeSallaKeyword($rawQuery);
+
+                    $result   = $sallaToolHandler->handleToolCall($function, [$keyword, $orderby, $order]);
                     $products = $result['products'] ?? [];
+
+                    // If a real keyword search returned nothing, fall back to catalog
+                    if (empty($products) && $keyword !== '') {
+                        $fallback = $sallaToolHandler->handleToolCall($function, ['', 'popularity', 'desc']);
+                        $products = $fallback['products'] ?? [];
+                    }
 
                     if (empty($products)) {
                         return '<p>Didn\'t find a perfect match, but these could be just what you need!</p>' . strval($sallaToolHandler->parseProducts($products));
@@ -377,16 +386,29 @@ class EcommerceToolService
 
             switch ($function) {
                 case 'getProducts':
-                    $query = $functionArgs['query'] ?? '';
-                    $orderby = $functionArgs['orderby'] ?? 'date';
-                    $order = $functionArgs['order'] ?? 'desc';
+                    $rawQuery = $functionArgs['query'] ?? '';
+                    $orderby  = $functionArgs['orderby'] ?? 'popularity';
+                    $order    = $functionArgs['order'] ?? 'desc';
 
-                    $result = $sallaToolHandler->handleToolCall($function, [$query, $orderby, $order]);
-                    $products = $result['products'] ?? [];
+                    // Strip generic/broad catalog words — Salla returns 0 results for them
+                    $keyword      = $this->sanitizeSallaKeyword($rawQuery);
                     $noExactMatch = false;
 
-                    if (empty($products)) {
+                    $result   = $sallaToolHandler->handleToolCall($function, [$keyword, $orderby, $order]);
+                    $products = $result['products'] ?? [];
+
+                    // If a real keyword search returned nothing, fall back to full catalog
+                    if (empty($products) && $keyword !== '') {
+                        $fallback = $sallaToolHandler->handleToolCall($function, ['', 'popularity', 'desc']);
+                        $products = $fallback['products'] ?? [];
                         $noExactMatch = true;
+                    }
+
+                    if (empty($products)) {
+                        return [
+                            'ai_content' => 'No products are currently available in the store.',
+                            'ui'         => null,
+                        ];
                     }
 
                     return [
@@ -427,6 +449,45 @@ class EcommerceToolService
         }
 
         return null;
+    }
+
+    /**
+     * Returns true when the query is a generic broad catalog request with no real search intent.
+     * Words like "product", "products", "item", "items" etc. match everything literally in Salla
+     * and return 0 results. We detect and strip them so the API returns the default catalog.
+     */
+    private function isBroadCatalogQuery(string $query): bool
+    {
+        if (empty(trim($query))) {
+            return true;
+        }
+
+        $broadTerms = [
+            'product', 'products', 'item', 'items', 'all', 'everything',
+            'anything', 'catalog', 'catalogue', 'stuff', 'thing', 'things',
+            'منتج', 'منتجات', 'كل', 'الكل', 'البضائع', 'بضاعة',
+        ];
+
+        $normalized = mb_strtolower(trim($query));
+
+        return in_array($normalized, $broadTerms, true);
+    }
+
+    /**
+     * Sanitize a Salla keyword: returns an empty string when the query is broad/generic
+     * so the API falls back to returning the default catalog instead of 0 results.
+     */
+    private function sanitizeSallaKeyword(string $query): string
+    {
+        if ($this->isBroadCatalogQuery($query)) {
+            Log::info('EcommerceToolService: broad catalog query — sending no keyword to Salla', [
+                'original_query' => $query,
+            ]);
+
+            return '';
+        }
+
+        return $query;
     }
 
     /**

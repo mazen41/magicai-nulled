@@ -167,7 +167,9 @@ class GeminiGenerator extends Generator
                 if ($ecommerceUi !== null && ! $hasKnowledgeBaseCall) {
                     $aiText = implode(' ', $ecommerceAiContents);
 
-                    return '<p>' . e($aiText) . '</p>' . $ecommerceUi;
+                    // Use a sentinel separator so plain-text channels (e.g. Messenger)
+                    // can extract only the text portion without the HTML carousel.
+                    return $aiText . '<!--ECOMMERCE_UI-->' . $ecommerceUi;
                 }
 
                 // Make another call with function results
@@ -184,7 +186,7 @@ class GeminiGenerator extends Generator
 
                 $aiText = $this->extractText($finalResult) ?: 'Sorry, I can\'t answer that.';
 
-                return $ecommerceUi !== null ? '<p>' . e($aiText) . '</p>' . $ecommerceUi : $aiText;
+                return $ecommerceUi !== null ? $aiText . '<!--ECOMMERCE_UI-->' . $ecommerceUi : $aiText;
             }
         }
 

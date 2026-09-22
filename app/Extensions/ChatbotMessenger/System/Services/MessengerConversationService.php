@@ -111,6 +111,12 @@ class MessengerConversationService
             $response .= "\n\n\nTo speak with a live support agent, please enter the #{$this->humanAgentCommand} command.";
         }
 
+        // Meta Messenger hard-rejects messages above 2000 chars — enforce a 1900-char safety cap
+        // after any suffix has been appended so the full string is always within limits.
+        if (mb_strlen($response) > 1900) {
+            $response = mb_substr($response, 0, 1897) . '...';
+        }
+
         $messenger->sendText($response, $recipient);
         $this->insertMessage($conversation, $response, 'assistant', $chatbot->ai_model);
     }
@@ -151,11 +157,28 @@ class MessengerConversationService
 
     protected function generateResponse(string $prompt): ?string
     {
-        return app(GeneratorService::class)
+        $raw = app(GeneratorService::class)
             ->setChatbot($this->conversation->chatbot)
             ->setConversation($this->conversation)
             ->setPrompt($prompt)
             ->generate();
+
+        if ($raw === null) {
+            return null;
+        }
+
+        // Messenger only accepts plain text (max 2000 chars).
+        // Strip any HTML the generator may return (e.g. product carousel HTML).
+        $text = strip_tags($raw);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = trim(preg_replace('/\s+/', ' ', $text));
+
+        // Hard-truncate to Messenger's 2000-char limit.
+        if (mb_strlen($text) > 1990) {
+            $text = mb_substr($text, 0, 1990) . '...';
+        }
+
+        return $text ?: null;
     }
 
     public function insertMessage(ChatbotConversation $conversation, string $message, string $role, string $model, bool $forcePanelEvent = false)
