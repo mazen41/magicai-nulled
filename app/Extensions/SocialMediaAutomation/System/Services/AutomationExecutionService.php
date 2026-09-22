@@ -25,12 +25,20 @@ class AutomationExecutionService
     {
         $accountId = $payload['account_id'] ?? null;
 
-        Log::debug('Processing comment event', [
+        Log::info('[FB AUTOMATION] Processing comment event', [
             'platform'   => $platform,
             'account_id' => $accountId,
             'post_id'    => $payload['post_id'] ?? null,
             'comment_id' => $payload['comment_id'] ?? null,
             'text'       => $payload['text'] ?? '',
+        ]);
+
+        // IMPORTANT: Current implementation uses SocialMediaPlatform only
+        // This might be the root cause if automation uses ConnectedAccount
+        Log::warning('[FB AUTOMATION] Checking SocialMediaPlatform-based automations (legacy only)', [
+            'platform' => $platform,
+            'account_id' => $accountId,
+            'note' => 'This does NOT check ConnectedAccount-based automations',
         ]);
 
         $automations = Automation::query()
@@ -44,19 +52,57 @@ class AutomationExecutionService
             ->with(['actions', 'replies', 'platform'])
             ->get();
 
-        Log::debug('Automations found for platform', [
+        Log::info('[FB AUTOMATION] Automations found for platform', [
             'platform' => $platform,
+            'account_id' => $accountId,
             'count'    => $automations->count(),
             'ids'      => $automations->pluck('id')->toArray(),
         ]);
 
+        if ($automations->isEmpty()) {
+            Log::warning('[FB AUTOMATION] NO AUTOMATIONS FOUND - checking platform data', [
+                'platform' => $platform,
+                'account_id' => $accountId,
+            ]);
+
+            // Check if any SocialMediaPlatform exists for this platform
+            $platforms = \App\Extensions\SocialMedia\System\Models\SocialMediaPlatform::query()
+                ->where('platform', $platform)
+                ->where('user_id', auth()->id())
+                ->get();
+
+            Log::info('[FB AUTOMATION] Available SocialMediaPlatforms', [
+                'platform' => $platform,
+                'count' => $platforms->count(),
+                'ids' => $platforms->pluck('id')->toArray(),
+                'platform_ids' => $platforms->pluck('credentials.platform_id')->toArray(),
+            ]);
+        }
+
         foreach ($automations as $automation) {
+            Log::info('[FB AUTOMATION] AUTOMATION LOADED', [
+                'automation_id' => $automation->id,
+                'name' => $automation->name,
+                'status' => $automation->status,
+                'social_media_platform_id' => $automation->social_media_platform_id,
+                'platform' => $automation->platform->platform ?? null,
+                'platform_id' => $automation->platform->id,
+                'platform_credentials_platform_id' => $automation->platform->credentials['platform_id'] ?? null,
+                'trigger_target' => $automation->trigger_target,
+                'keyword_mode' => $automation->keyword_mode,
+                'include_keywords' => $automation->include_keywords ?? [],
+                'actions_count' => $automation->actions->count(),
+            ]);
+
             $matched = $this->matchesTrigger($automation, $payload);
 
-            Log::debug('Automation trigger check', [
-                'automation_id'   => $automation->id,
-                'automation_name' => $automation->name ?? null,
-                'matched'         => $matched,
+            Log::info('[FB AUTOMATION] TRIGGER EVALUATION', [
+                'automation_id' => $automation->id,
+                'comment_text' => $payload['text'] ?? '',
+                'keyword_mode' => $automation->keyword_mode,
+                'include_keywords' => $automation->include_keywords ?? [],
+                'exclude_keywords' => $automation->exclude_keywords ?? [],
+                'matched' => $matched,
             ]);
 
             if ($matched) {
@@ -69,9 +115,9 @@ class AutomationExecutionService
                     'status'        => 'pending',
                 ]);
 
-                Log::debug('Pending automation created', [
+                Log::info('[FB AUTOMATION] PENDING AUTOMATION CREATED', [
                     'automation_id' => $automation->id,
-                    'execute_at'    => now()->addSeconds($delay)->toDateTimeString(),
+                    'execute_at' => now()->addSeconds($delay)->toDateTimeString(),
                     'delay_seconds' => $delay,
                 ]);
             }
@@ -85,12 +131,19 @@ class AutomationExecutionService
      */
     public function matchesTrigger(Automation $automation, array $commentData): bool
     {
+        Log::info('[FB AUTOMATION] Trigger matching check', [
+            'automation_id' => $automation->id,
+            'trigger_target' => $automation->trigger_target,
+            'trigger_post_id' => $automation->trigger_post_id,
+            'received_post_id' => $commentData['post_id'] ?? null,
+        ]);
+
         // Check post targeting
         if ($automation->trigger_target === 'specific_post') {
             $postId = $commentData['post_id'] ?? null;
 
             if ($postId !== $automation->trigger_post_id) {
-                Log::debug('Trigger mismatch: post_id does not match', [
+                Log::debug('[FB AUTOMATION] Trigger mismatch: post_id does not match', [
                     'automation_id'   => $automation->id,
                     'expected_post'   => $automation->trigger_post_id,
                     'received_post'   => $postId,
@@ -111,12 +164,16 @@ class AutomationExecutionService
                 foreach ($includeKeywords as $keyword) {
                     if (str_contains($commentText, strtolower($keyword))) {
                         $found = true;
+                        Log::info('[FB AUTOMATION] Include keyword matched', [
+                            'automation_id' => $automation->id,
+                            'keyword' => $keyword,
+                        ]);
 
                         break;
                     }
                 }
                 if (! $found) {
-                    Log::debug('Trigger mismatch: no include keyword found in comment', [
+                    Log::debug('[FB AUTOMATION] Trigger mismatch: no include keyword found in comment', [
                         'automation_id'    => $automation->id,
                         'comment_text'     => $commentText,
                         'include_keywords' => $includeKeywords,
@@ -130,7 +187,7 @@ class AutomationExecutionService
             $excludeKeywords = $automation->exclude_keywords ?? [];
             foreach ($excludeKeywords as $keyword) {
                 if (str_contains($commentText, strtolower($keyword))) {
-                    Log::debug('Trigger mismatch: exclude keyword found in comment', [
+                    Log::debug('[FB AUTOMATION] Trigger mismatch: exclude keyword found in comment', [
                         'automation_id'   => $automation->id,
                         'comment_text'    => $commentText,
                         'matched_keyword' => $keyword,
@@ -140,6 +197,10 @@ class AutomationExecutionService
                 }
             }
         }
+
+        Log::info('[FB AUTOMATION] Trigger matched successfully', [
+            'automation_id' => $automation->id,
+        ]);
 
         return true;
     }
@@ -153,7 +214,7 @@ class AutomationExecutionService
     {
         $commentId = $commenterData['comment_id'] ?? null;
 
-        Log::debug('Executing automation actions', [
+        Log::info('[FB AUTOMATION] Executing automation actions', [
             'automation_id' => $automation->id,
             'comment_id'    => $commentId,
             'commenter_id'  => $commenterData['commenter_id'] ?? null,
@@ -169,7 +230,7 @@ class AutomationExecutionService
                 ->exists();
 
             if ($exists) {
-                Log::debug('Automation skipped: already executed for this comment', [
+                Log::info('[FB AUTOMATION] Automation skipped: already executed for this comment', [
                     'automation_id' => $automation->id,
                     'comment_id'    => $commentId,
                 ]);
@@ -187,13 +248,25 @@ class AutomationExecutionService
             'status'              => 'success',
         ]);
 
+        Log::info('[FB AUTOMATION] EXECUTION RECORD CREATED', [
+            'automation_id' => $automation->id,
+            'log_id' => $log->id,
+        ]);
+
         try {
             $variables = $this->buildVariables($commenterData);
+
+            Log::info('[FB AUTOMATION] Variables built', [
+                'variables' => array_keys($variables),
+            ]);
 
             // Send public reply if enabled
             if ($automation->enable_public_replies && $automation->replies->isNotEmpty()) {
                 $replyText = $automation->replies->random()->content;
                 $replyText = $this->substituteVariables($replyText, $variables);
+                Log::info('[FB AUTOMATION] Sending public reply', [
+                    'reply_length' => strlen($replyText),
+                ]);
                 $this->sendPublicReply(
                     $automation->platform,
                     $commenterData['comment_id'] ?? '',
@@ -207,6 +280,10 @@ class AutomationExecutionService
                     $automation->actions->toArray(),
                     $variables
                 );
+                Log::info('[FB AUTOMATION] Sending DM', [
+                    'actions_count' => count($processedActions),
+                    'action_types' => array_column($processedActions, 'type'),
+                ]);
                 $this->sendDm(
                     $automation->platform,
                     $commenterData,
@@ -217,10 +294,16 @@ class AutomationExecutionService
             $log->update([
                 'actions_executed' => $automation->actions->pluck('type')->toArray(),
             ]);
+
+            Log::info('[FB AUTOMATION] EXECUTION COMPLETED SUCCESSFULLY', [
+                'automation_id' => $automation->id,
+            ]);
         } catch (Throwable $e) {
-            Log::error('Automation execution failed', [
+            Log::error('[FB AUTOMATION] EXECUTION FAILED', [
                 'automation_id' => $automation->id,
                 'error'         => $e->getMessage(),
+                'file'          => $e->getFile(),
+                'line'          => $e->getLine(),
             ]);
 
             $log->update([
@@ -421,14 +504,22 @@ class AutomationExecutionService
     {
         $accessToken = $platform->credentials['access_token'] ?? null;
 
+        Log::info('[FB AUTOMATION] Sending Facebook DM', [
+            'platform_id'   => $platform->id,
+            'comment_id'    => $commentId,
+            'has_token'     => ! empty($accessToken),
+            'actions_count' => count($actions),
+            'action_types'  => array_column($actions, 'type'),
+        ]);
+
         if (! $accessToken) {
-            Log::warning('Facebook DM skipped: missing access token', ['platform_id' => $platform->id]);
+            Log::warning('[FB AUTOMATION] Facebook DM skipped: missing access token', ['platform_id' => $platform->id]);
 
             return;
         }
 
         if (! $commentId) {
-            Log::warning('Facebook DM skipped: missing comment_id', ['platform_id' => $platform->id]);
+            Log::warning('[FB AUTOMATION] Facebook DM skipped: missing comment_id', ['platform_id' => $platform->id]);
 
             return;
         }
@@ -436,18 +527,10 @@ class AutomationExecutionService
         $apiVersion = config('social-media.facebook.api_version', 'v18.0');
         $baseUrl = "https://graph.facebook.com/{$apiVersion}";
 
-        Log::debug('Facebook DM sending', [
-            'platform_id'   => $platform->id,
-            'comment_id'    => $commentId,
-            'api_version'   => $apiVersion,
-            'actions_count' => count($actions),
-            'action_types'  => array_column($actions, 'type'),
-        ]);
-
         foreach ($actions as $action) {
             if ($action['type'] === 'delay') {
                 $seconds = min((int) ($action['content']['seconds'] ?? 1), 60);
-                Log::debug('Facebook DM delay action', ['seconds' => $seconds]);
+                Log::debug('[FB AUTOMATION] Facebook DM delay action', ['seconds' => $seconds]);
                 sleep($seconds);
 
                 continue;
@@ -456,21 +539,40 @@ class AutomationExecutionService
             $message = $this->buildFacebookMessage($action);
 
             if (! $message) {
-                Log::debug('Facebook DM action skipped: unsupported type', ['type' => $action['type'] ?? null]);
+                Log::debug('[FB AUTOMATION] Facebook DM action skipped: unsupported type', ['type' => $action['type'] ?? null]);
 
                 continue;
             }
 
-            Log::debug('Facebook DM request', [
-                'url'       => "{$baseUrl}/me/messages",
-                'recipient' => ['comment_id' => $commentId],
-                'message'   => $message,
+            Log::info('[FB AUTOMATION] FACEBOOK GRAPH API REQUEST', [
+                'endpoint' => "{$baseUrl}/me/messages",
+                'method' => 'POST',
+                'recipient_comment_id' => $commentId,
+                'message_type' => $action['type'] ?? null,
+                'api_version' => $apiVersion,
             ]);
 
             $response = $this->graphApiPost("{$baseUrl}/me/messages", $accessToken, [
                 'recipient' => ['comment_id' => $commentId],
                 'message'   => $message,
             ]);
+
+            Log::info('[FB AUTOMATION] FACEBOOK GRAPH API RESPONSE', [
+                'http_status' => $response->status(),
+                'successful' => $response->successful(),
+                'body_keys' => array_keys($response->json() ?? []),
+            ]);
+
+            if (!$response->successful()) {
+                Log::error('[FB AUTOMATION] FACEBOOK GRAPH API FAILED', [
+                    'http_status' => $response->status(),
+                    'error' => $response->json(),
+                ]);
+            } else {
+                Log::info('[FB AUTOMATION] FACEBOOK DM SENT SUCCESSFULLY', [
+                    'message_id' => $response->json('message_id'),
+                ]);
+            }
 
             $this->logApiResponse('Facebook DM (private reply)', $response);
         }

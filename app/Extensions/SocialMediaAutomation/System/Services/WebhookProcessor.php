@@ -59,14 +59,14 @@ class WebhookProcessor
     public function processFacebookPayload(array $payload): void
     {
         $entryCount = count($payload['entry'] ?? []);
-        Log::debug('Facebook payload processing started', [
+        Log::info('[FB AUTOMATION] Facebook payload processing started', [
             'object'      => $payload['object'] ?? null,
             'entry_count' => $entryCount,
         ]);
 
         foreach ($payload['entry'] ?? [] as $entry) {
             $changeCount = count($entry['changes'] ?? []);
-            Log::debug('Facebook entry processing', [
+            Log::info('[FB AUTOMATION] Facebook entry processing', [
                 'entry_id'     => $entry['id'] ?? null,
                 'change_count' => $changeCount,
             ]);
@@ -76,7 +76,7 @@ class WebhookProcessor
                 $value = $change['value'] ?? [];
 
                 if ($field !== 'feed') {
-                    Log::debug('Facebook change skipped: field is not feed', [
+                    Log::debug('[FB AUTOMATION] Facebook change skipped: field is not feed', [
                         'field' => $field,
                     ]);
 
@@ -86,7 +86,7 @@ class WebhookProcessor
                 $item = $value['item'] ?? '';
 
                 if ($item !== 'comment') {
-                    Log::debug('Facebook feed change skipped: item is not comment', [
+                    Log::debug('[FB AUTOMATION] Facebook feed change skipped: item is not comment', [
                         'item'    => $item,
                         'verb'    => $value['verb'] ?? null,
                         'post_id' => $value['post_id'] ?? null,
@@ -105,7 +105,7 @@ class WebhookProcessor
                     'text'                 => $value['message'] ?? '',
                 ];
 
-                Log::debug('Facebook comment event extracted', $commentData);
+                Log::info('[FB AUTOMATION] COMMENT EVENT DETECTED', $commentData);
 
                 $this->executionService->processCommentEvent('facebook', $commentData);
             }

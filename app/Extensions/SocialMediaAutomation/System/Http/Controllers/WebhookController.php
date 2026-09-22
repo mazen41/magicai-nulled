@@ -139,15 +139,17 @@ class WebhookController extends Controller
         if ($request->isMethod('POST')) {
             $appSecret = setting('FACEBOOK_APP_SECRET');
 
-            Log::debug('Facebook webhook POST received', [
+            Log::info('[FB AUTOMATION] WEBHOOK RECEIVED', [
+                'method' => 'POST',
                 'has_app_secret'  => ! empty($appSecret),
                 'has_signature'   => $request->hasHeader('X-Hub-Signature-256'),
                 'content_length'  => strlen($request->getContent()),
-                'payload_preview' => $request->json()->all(),
+                'object' => $request->json('object'),
+                'entry_count' => count($request->json('entry', [])),
             ]);
 
             if ($appSecret && ! $this->processor->verifySignature($request, $appSecret)) {
-                Log::warning('Facebook webhook signature verification failed', [
+                Log::warning('[FB AUTOMATION] Webhook signature verification failed', [
                     'signature_header' => $request->header('X-Hub-Signature-256'),
                 ]);
 
@@ -157,9 +159,10 @@ class WebhookController extends Controller
             try {
                 $this->processor->processFacebookPayload($request->json()->all());
             } catch (Throwable $e) {
-                Log::error('Facebook webhook processing failed', [
+                Log::error('[FB AUTOMATION] Webhook processing failed', [
                     'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
                 ]);
             }
 

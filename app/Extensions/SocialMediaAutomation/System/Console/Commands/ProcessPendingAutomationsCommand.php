@@ -23,7 +23,7 @@ class ProcessPendingAutomationsCommand extends Command
             ->where('execute_at', '<=', now())
             ->get();
 
-        Log::debug('Processing pending automations', [
+        Log::info('[FB AUTOMATION] Processing pending automations', [
             'count' => $pendings->count(),
             'ids'   => $pendings->pluck('id')->toArray(),
         ]);
@@ -31,10 +31,14 @@ class ProcessPendingAutomationsCommand extends Command
         foreach ($pendings as $pending) {
             $pending->update(['status' => 'processing']);
 
-            Log::debug('Processing pending automation', [
+            Log::info('[FB AUTOMATION] Processing pending automation', [
                 'pending_id'    => $pending->id,
                 'automation_id' => $pending->automation_id,
                 'execute_at'    => $pending->execute_at,
+                'comment_data'   => [
+                    'comment_id' => $pending->comment_data['comment_id'] ?? null,
+                    'text' => $pending->comment_data['text'] ?? '',
+                ],
             ]);
 
             try {
@@ -45,12 +49,13 @@ class ProcessPendingAutomationsCommand extends Command
 
                 $pending->update(['status' => 'completed']);
 
-                Log::debug('Pending automation completed', ['pending_id' => $pending->id]);
+                Log::info('[FB AUTOMATION] Pending automation completed', ['pending_id' => $pending->id]);
             } catch (Throwable $e) {
-                Log::error('Pending automation failed', [
+                Log::error('[FB AUTOMATION] Pending automation failed', [
                     'pending_id' => $pending->id,
                     'error'      => $e->getMessage(),
-                    'trace'      => $e->getTraceAsString(),
+                    'file'       => $e->getFile(),
+                    'line'       => $e->getLine(),
                 ]);
 
                 $pending->update([
