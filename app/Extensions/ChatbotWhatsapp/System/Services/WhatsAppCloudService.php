@@ -16,6 +16,53 @@ class WhatsAppCloudService
 {
     public ChatbotChannel $chatbotChannel;
 
+    /**
+     * Send a product image via WhatsApp Cloud API.
+     * Non-fatal — logs on failure and returns false so the caller can continue.
+     */
+    public function sendImage(string $imageUrl, string $recipientPhone): bool
+    {
+        $credentials   = $this->chatbotChannel->credentials ?? [];
+        $accessToken   = data_get($credentials, 'access_token', '');
+        $phoneNumberId = data_get($credentials, 'phone_number_id', '');
+
+        if (! $accessToken || ! $phoneNumberId) {
+            return false;
+        }
+
+        $graphVersion = config('services.meta.graph_version', 'v18.0');
+
+        try {
+            $response = Http::withToken($accessToken)
+                ->timeout(15)
+                ->post("https://graph.facebook.com/{$graphVersion}/{$phoneNumberId}/messages", [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $recipientPhone,
+                    'type'              => 'image',
+                    'image'             => ['link' => $imageUrl],
+                ]);
+
+            if (! $response->successful()) {
+                Log::warning('WhatsApp Cloud: image send failed', [
+                    'status'    => $response->status(),
+                    'body'      => $response->body(),
+                    'image_url' => $imageUrl,
+                    'recipient' => $recipientPhone,
+                ]);
+                return false;
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp Cloud: exception sending image', [
+                'error'     => $e->getMessage(),
+                'image_url' => $imageUrl,
+                'recipient' => $recipientPhone,
+            ]);
+            return false;
+        }
+    }
+
     public function sendText(string $message, string $recipientPhone): void
     {
         $credentials  = $this->chatbotChannel->credentials ?? [];

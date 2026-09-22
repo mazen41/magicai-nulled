@@ -12,6 +12,38 @@ class TwilioWhatsappService
 
     public ?string $twilioPhone = null;
 
+    /**
+     * Send a product image via Twilio WhatsApp.
+     * Non-fatal — returns false on failure.
+     */
+    public function sendImage(string $imageUrl, string $receiver): bool
+    {
+        try {
+            $client = $this->client();
+
+            $from = $this->chatbotChannel->isSandbox()
+                ? data_get($this->chatbotChannel['credentials'], 'whatsapp_sandbox_phone')
+                : data_get($this->chatbotChannel['credentials'], 'whatsapp_phone');
+
+            $receiver = $this->receiverCheck($receiver);
+
+            $client->messages->create($receiver, [
+                'from'      => 'whatsapp:' . $from,
+                'body'      => '',
+                'mediaUrl'  => [$imageUrl],
+            ]);
+
+            return true;
+        } catch (Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('TwilioWhatsappService: image send failed', [
+                'error'     => $e->getMessage(),
+                'image_url' => $imageUrl,
+                'recipient' => $receiver,
+            ]);
+            return false;
+        }
+    }
+
     public function sendText($message, $receiver)
     {
         $client = $this->client();
