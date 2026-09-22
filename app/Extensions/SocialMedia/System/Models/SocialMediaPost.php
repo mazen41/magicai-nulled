@@ -7,6 +7,7 @@ use App\Extensions\SocialMedia\System\Enums\PostTypeEnum;
 use App\Extensions\SocialMedia\System\Enums\StatusEnum;
 use App\Extensions\SocialMediaAgent\System\Models\SocialMediaAgentPost;
 use App\Helpers\Classes\MarketplaceHelper;
+use App\Models\ConnectedAccount;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,6 +25,7 @@ class SocialMediaPost extends Model
         'company_id',
         'campaign_id',
         'social_media_platform_id',
+        'connected_account_id',
         'social_media_platform',
         'post_type',
         'is_personalized_content',
@@ -144,6 +146,11 @@ class SocialMediaPost extends Model
     public function platform(): BelongsTo
     {
         return $this->belongsTo(SocialMediaPlatform::class, 'social_media_platform_id', 'id');
+    }
+
+    public function connectedAccount(): BelongsTo
+    {
+        return $this->belongsTo(ConnectedAccount::class, 'connected_account_id', 'id');
     }
 
     public function logs(): HasMany

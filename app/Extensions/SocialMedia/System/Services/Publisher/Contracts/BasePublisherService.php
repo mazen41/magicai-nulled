@@ -7,6 +7,7 @@ use App\Extensions\SocialMedia\System\Enums\StatusEnum;
 use App\Extensions\SocialMedia\System\Models\SocialMediaPlatform;
 use App\Extensions\SocialMedia\System\Models\SocialMediaPost;
 use App\Extensions\SocialMedia\System\Models\SocialMediaSharedLog;
+use App\Extensions\SocialMedia\System\Services\Publisher\Contracts\PlatformAccountInterface;
 use Illuminate\Http\Client\Response;
 use JetBrains\PhpStorm\NoReturn;
 
@@ -14,7 +15,7 @@ class BasePublisherService
 {
     public SocialMediaPost $post;
 
-    public SocialMediaPlatform $platform;
+    public PlatformAccountInterface $platform;
 
     public array $credentials;
 
@@ -232,7 +233,7 @@ class BasePublisherService
         return $this;
     }
 
-    public function setPlatform(SocialMediaPlatform $platform): self
+    public function setPlatform(PlatformAccountInterface $platform): self
     {
         $this->platform = $platform;
 
