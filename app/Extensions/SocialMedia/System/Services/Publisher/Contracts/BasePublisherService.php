@@ -216,20 +216,21 @@ class BasePublisherService
     {
         \Log::info('[BASE PUBLISHER] check() called', [
             'post_status' => $this->post->status,
-            'expected_status' => StatusEnum::scheduled->value,
+            'allowed_statuses' => [StatusEnum::pending->value, StatusEnum::scheduled->value],
             'platform_connected' => $this->platform->isConnected(),
         ]);
 
-        if ($this->post->status !== StatusEnum::scheduled) {
-            \Log::error('[BASE PUBLISHER] check() failed: post is not scheduled', [
+        // Allow both pending (immediate publish) and scheduled (scheduler publish)
+        if (! in_array($this->post->status, [StatusEnum::pending, StatusEnum::scheduled], true)) {
+            \Log::error('[BASE PUBLISHER] check() failed: invalid post status', [
                 'current_status' => $this->post->status,
-                'required_status' => StatusEnum::scheduled->value,
+                'allowed_statuses' => [StatusEnum::pending->value, StatusEnum::scheduled->value],
             ]);
 
             SocialMediaSharedLog::query()->create([
                 'social_media_post_id' => $this->post->id,
                 'response'             => [
-                    'message' => 'Post dont scheduled.',
+                    'message' => 'Post status is not valid for publishing.',
                 ],
                 'status'     => LogStatusEnum::failed,
                 'created_at' => now(),
