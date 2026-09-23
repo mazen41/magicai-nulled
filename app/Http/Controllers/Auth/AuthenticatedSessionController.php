@@ -170,6 +170,12 @@ class AuthenticatedSessionController extends Controller
             'headers' => $response->headers->all(),
         ]);
 
+        \Log::info('[LOGIN] Session data after login', [
+            'session_id' => session()->getId(),
+            'has_auth_user' => session()->has('_token'),
+            'session_all' => session()->all(),
+        ]);
+
         return $response;
     }
 
