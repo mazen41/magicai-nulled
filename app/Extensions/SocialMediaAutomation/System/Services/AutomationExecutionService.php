@@ -243,13 +243,15 @@ class AutomationExecutionService
         $platformName = $automation->platform_name;
         $accessToken  = $automation->access_token;
 
-        Log::info('[FB AUTOMATION] Executing actions', [
+        Log::info('[FB AUTOMATION EXECUTE] Executing actions', [
             'automation_id'          => $automation->id,
             'platform'               => $platformName,
             'uses_connected_account' => !is_null($automation->connected_account_id),
             'has_token'              => !empty($accessToken),
             'comment_id'             => $commentId,
             'actions_count'          => $automation->actions->count(),
+            'enable_public_replies'  => $automation->enable_public_replies,
+            'replies_count'          => $automation->replies->count(),
         ]);
 
         if ($commentId) {
@@ -284,7 +286,18 @@ class AutomationExecutionService
             if ($automation->enable_public_replies && $automation->replies->isNotEmpty()) {
                 $replyText = $automation->replies->random()->content;
                 $replyText = $this->substituteVariables($replyText, $variables);
+                Log::info('[FB AUTOMATION EXECUTE] Sending public reply', [
+                    'reply_length' => strlen($replyText),
+                    'reply_text' => $replyText,
+                    'comment_id' => $commenterData['comment_id'],
+                ]);
                 $this->sendPublicReplyForAutomation($automation, $commenterData['comment_id'] ?? '', $replyText);
+                Log::info('[FB AUTOMATION EXECUTE] Public reply sent successfully');
+            } else {
+                Log::info('[FB AUTOMATION EXECUTE] Public reply not enabled or no replies configured', [
+                    'enable_public_replies' => $automation->enable_public_replies,
+                    'replies_count' => $automation->replies->count(),
+                ]);
             }
 
             // Send DM actions

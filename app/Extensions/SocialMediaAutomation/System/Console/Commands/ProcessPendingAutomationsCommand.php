@@ -23,15 +23,16 @@ class ProcessPendingAutomationsCommand extends Command
             ->where('execute_at', '<=', now())
             ->get();
 
-        Log::info('[FB AUTOMATION DEBUG] JOB STARTED', [
+        Log::info('[FB AUTOMATION QUEUE] JOB STARTED', [
             'pending_count' => $pendings->count(),
             'ids' => $pendings->pluck('id')->toArray(),
+            'execute_at_threshold' => now()->toIso8601String(),
         ]);
 
         foreach ($pendings as $pending) {
             $pending->update(['status' => 'processing']);
 
-            Log::info('[FB AUTOMATION DEBUG] Processing pending automation', [
+            Log::info('[FB AUTOMATION QUEUE] Processing pending automation', [
                 'pending_id'    => $pending->id,
                 'automation_id' => $pending->automation_id,
                 'execute_at'    => $pending->execute_at,
@@ -43,19 +44,23 @@ class ProcessPendingAutomationsCommand extends Command
 
             try {
                 $service->executeActions(
-                    $pending->automation->load(['actions', 'replies', 'platform']),
+                    $pending->automation->load(['actions', 'replies', 'platform', 'connectedAccount']),
                     $pending->comment_data
                 );
 
                 $pending->update(['status' => 'completed']);
 
-                Log::info('[FB AUTOMATION DEBUG] JOB FINISHED', ['pending_id' => $pending->id]);
+                Log::info('[FB AUTOMATION QUEUE] JOB FINISHED', [
+                    'pending_id' => $pending->id,
+                    'status' => 'completed',
+                ]);
             } catch (Throwable $e) {
-                Log::error('[FB AUTOMATION DEBUG] Pending automation failed', [
+                Log::error('[FB AUTOMATION QUEUE] Pending automation failed', [
                     'pending_id' => $pending->id,
                     'error'      => $e->getMessage(),
                     'file'       => $e->getFile(),
                     'line'       => $e->getLine(),
+                    'trace'      => mb_substr($e->getTraceAsString(), 0, 1000),
                 ]);
 
                 $pending->update([
@@ -64,5 +69,9 @@ class ProcessPendingAutomationsCommand extends Command
                 ]);
             }
         }
+
+        Log::info('[FB AUTOMATION QUEUE] All pending automations processed', [
+            'total_processed' => $pendings->count(),
+        ]);
     }
 }
