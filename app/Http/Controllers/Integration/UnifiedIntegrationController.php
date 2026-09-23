@@ -39,16 +39,38 @@ class UnifiedIntegrationController extends Controller
     {
         $user = Auth::user();
 
+        \Log::info('[CONNECTED ACCOUNT] Disconnect request received', [
+            'account_id' => $account->id,
+            'platform' => $account->platform,
+            'account_identifier' => $account->account_identifier,
+            'user_id' => $user->id,
+            'account_user_id' => $account->user_id,
+        ]);
+
         if ($account->user_id !== $user->id) {
+            \Log::error('[CONNECTED ACCOUNT] Disconnect failed: unauthorized', [
+                'account_id' => $account->id,
+                'account_user_id' => $account->user_id,
+                'current_user_id' => $user->id,
+            ]);
             abort(403, 'Unauthorized');
         }
 
-        $this->accountService->disconnect($account, $user);
+        $result = $this->accountService->disconnect($account, $user);
 
-        return back()->with([
-            'type'    => 'success',
-            'message' => trans('Account disconnected successfully.'),
-        ]);
+        if ($result) {
+            \Log::info('[CONNECTED ACCOUNT] Disconnect successful redirect');
+            return back()->with([
+                'type'    => 'success',
+                'message' => trans('Account disconnected successfully.'),
+            ]);
+        } else {
+            \Log::error('[CONNECTED ACCOUNT] Disconnect failed: service returned false');
+            return back()->with([
+                'type'    => 'error',
+                'message' => trans('Failed to disconnect account.'),
+            ]);
+        }
     }
 
     public function apiList(Request $request)

@@ -72,8 +72,20 @@ class ConnectedAccountService
     public function disconnect(ConnectedAccount $account, User $user): bool
     {
         if ($account->user_id !== $user->id) {
+            \Log::error('[CONNECTED ACCOUNT] Disconnect failed: ownership check', [
+                'account_id' => $account->id,
+                'account_user_id' => $account->user_id,
+                'current_user_id' => $user->id,
+            ]);
             return false; // ownership check
         }
+
+        \Log::info('[CONNECTED ACCOUNT] Disconnecting account', [
+            'account_id' => $account->id,
+            'platform' => $account->platform,
+            'account_identifier' => $account->account_identifier,
+            'current_status' => $account->connection_status,
+        ]);
 
         $account->update([
             'connection_status' => 'disconnected',
@@ -83,9 +95,15 @@ class ConnectedAccountService
         ]);
 
         // Nullify connected_account_id on any ext_chatbots using this account
-        \App\Extensions\Chatbot\System\Models\Chatbot::query()
+        $updatedChatbots = \App\Extensions\Chatbot\System\Models\Chatbot::query()
             ->where('connected_account_id', $account->id)
             ->update(['connected_account_id' => null]);
+
+        \Log::info('[CONNECTED ACCOUNT] Account disconnected successfully', [
+            'account_id' => $account->id,
+            'new_status' => 'disconnected',
+            'chatbots_updated' => $updatedChatbots,
+        ]);
 
         return true;
     }
