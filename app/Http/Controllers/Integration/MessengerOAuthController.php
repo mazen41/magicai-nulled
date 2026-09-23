@@ -193,3 +193,4 @@ class MessengerOAuthController extends Controller
         return response('<pre>' . implode("\n", $results) . '</pre>')
             ->header('Content-Type', 'text/html');
     }
+}
