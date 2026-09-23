@@ -123,6 +123,23 @@ class MessengerOAuthController extends Controller
                 'debug_response' => $debugResponse->json(),
             ]);
 
+            // Also update legacy SocialMediaPlatform with the new token
+            $legacyPlatform = \App\Extensions\SocialMedia\System\Models\SocialMediaPlatform::where('platform', 'facebook')
+                ->whereJsonContains('credentials->platform_id', $page['id'])
+                ->first();
+
+            if ($legacyPlatform) {
+                $credentials = json_decode($legacyPlatform->credentials, true);
+                $credentials['access_token'] = $page['access_token'];
+                $legacyPlatform->credentials = json_encode($credentials);
+                $legacyPlatform->save();
+
+                Log::info('Messenger OAuth: Updated legacy platform credentials', [
+                    'page_id' => $page['id'],
+                    'platform_id' => $legacyPlatform->id,
+                ]);
+            }
+
             // Subscribe the Page to our App's webhooks so Facebook starts
             // delivering feed (comments) and messages events to our webhook URL.
             // Without this call the App-level webhook URL is registered but
