@@ -30,7 +30,13 @@ export default function TriggerConfigPanel() {
 	const triggerPostData = data.triggerPostData ?? null;
 
 	function update(partial) {
-		if (nodeId) updateNodeData(nodeId, partial);
+		if (nodeId) {
+			// If disabling public replies, clear reply variations
+			if ('enablePublicReplies' in partial && !partial.enablePublicReplies) {
+				partial.replyVariations = [];
+			}
+			updateNodeData(nodeId, partial);
+		}
 	}
 
 	function addIncludeKeyword() {

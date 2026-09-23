@@ -99,6 +99,14 @@ class AutomationController extends Controller
             return $response;
         }
 
+        \Log::info('[AUTOMATION SAVE] Store request payload', [
+            'enable_public_replies' => $request->boolean('enable_public_replies'),
+            'actions_count' => count($request->input('actions', [])),
+            'replies_count' => count($request->input('replies', [])),
+            'actions' => $request->input('actions', []),
+            'replies' => $request->input('replies', []),
+        ]);
+
         $automation = Automation::query()->create([
             'user_id'                  => Auth::id(),
             'social_media_platform_id' => $request->social_media_platform_id,
@@ -135,6 +143,15 @@ class AutomationController extends Controller
                 'message' => trans('This feature is disabled in demo mode.'),
             ]);
         }
+
+        \Log::info('[AUTOMATION SAVE] Update request payload', [
+            'automation_id' => $automation->id,
+            'enable_public_replies' => $request->boolean('enable_public_replies'),
+            'actions_count' => count($request->input('actions', [])),
+            'replies_count' => count($request->input('replies', [])),
+            'actions' => $request->input('actions', []),
+            'replies' => $request->input('replies', []),
+        ]);
 
         $automation->update([
             'social_media_platform_id' => $request->social_media_platform_id,
@@ -260,11 +277,29 @@ class AutomationController extends Controller
         $automation->actions()->delete();
 
         foreach ($actions as $index => $action) {
-            $automation->actions()->create([
-                'type'    => $action['type'],
-                'content' => $action['content'],
-                'order'   => $index,
-            ]);
+            // Only create action if it has meaningful content
+            $content = $action['content'] ?? [];
+            $hasContent = false;
+
+            foreach ($content as $value) {
+                if (is_array($value)) {
+                    if (!empty($value)) {
+                        $hasContent = true;
+                        break;
+                    }
+                } elseif (!is_null($value) && $value !== '') {
+                    $hasContent = true;
+                    break;
+                }
+            }
+
+            if ($hasContent) {
+                $automation->actions()->create([
+                    'type'    => $action['type'],
+                    'content' => $action['content'],
+                    'order'   => $index,
+                ]);
+            }
         }
     }
 

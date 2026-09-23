@@ -23,9 +23,9 @@ export default function ActionConfigPanel() {
 
 	function addAction(type) {
 		const defaults = {
-			text: { text: '' },
-			button: { label: '', url: '' },
-			image: { path: '', url: '' },
+			text: { text: null },
+			button: { label: null, url: null },
+			image: { path: null, url: null },
 			quick_replies: { items: [] },
 			delay: { seconds: 5 },
 		};
