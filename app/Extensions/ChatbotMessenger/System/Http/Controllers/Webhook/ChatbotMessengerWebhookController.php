@@ -48,6 +48,18 @@ class ChatbotMessengerWebhookController extends Controller
             'entry_count' => count($request->input('entry', [])),
         ]);
 
+        // LOG FULL PAYLOAD (SANITIZED) FOR DEBUGGING
+        $payload = $request->json()->all();
+        Log::info('[FB WEBHOOK DEBUG] Full payload structure', [
+            'object' => $payload['object'] ?? null,
+            'entry_count' => count($payload['entry'] ?? []),
+            'entry_0_keys' => array_keys($payload['entry'][0] ?? []),
+            'entry_0_id' => $payload['entry'][0]['id'] ?? null,
+            'entry_0_time' => $payload['entry'][0]['time'] ?? null,
+            'has_changes' => isset($payload['entry'][0]['changes']),
+            'has_messaging' => isset($payload['entry'][0]['messaging']),
+        ]);
+
         // Handle Meta webhook verification (GET)
         if ($request->isMethod('get')) {
             return $this->verifyWebhookSubscription($request);
@@ -72,6 +84,19 @@ class ChatbotMessengerWebhookController extends Controller
             'change_count' => count($changes),
             'messaging_keys' => $messaging ? array_keys($messaging) : [],
         ]);
+
+        // LOG ALL CHANGES FOR DEBUGGING
+        if (!empty($changes)) {
+            foreach ($changes as $index => $change) {
+                Log::info('[FB WEBHOOK DEBUG] All changes received', [
+                    'change_index' => $index,
+                    'field' => $change['field'] ?? null,
+                    'value_keys' => array_keys($change['value'] ?? []),
+                    'item' => $change['value']['item'] ?? null,
+                    'verb' => $change['value']['verb'] ?? null,
+                ]);
+            }
+        }
 
         // CHECK FOR FEED EVENTS AND ROUTE TO AUTOMATION PROCESSOR
         if (!empty($changes)) {
