@@ -179,6 +179,9 @@ Route::middleware(['auth', 'updateUserActivity'])
                             ->name('connect');
                         Route::get('callback', [\App\Http\Controllers\Integration\MessengerOAuthController::class, 'callback'])
                             ->name('callback');
+                        // One-time fix: subscribe existing connected pages to app webhooks
+                        Route::get('resubscribe', [\App\Http\Controllers\Integration\MessengerOAuthController::class, 'resubscribeAll'])
+                            ->name('resubscribe');
                     });
 
                     // WhatsApp Business Cloud API — Meta Embedded Signup

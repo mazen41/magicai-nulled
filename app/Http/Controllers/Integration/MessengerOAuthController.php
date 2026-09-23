@@ -106,6 +106,30 @@ class MessengerOAuthController extends Controller
                 ]
             );
 
+            // Subscribe the Page to our App's webhooks so Facebook starts
+            // delivering feed (comments) and messages events to our webhook URL.
+            // Without this call the App-level webhook URL is registered but
+            // Facebook never sends real events for this Page.
+            $subscribeRes = Http::withToken($page['access_token'])
+                ->post("https://graph.facebook.com/v18.0/{$page['id']}/subscribed_apps", [
+                    'subscribed_fields' => 'feed,messages,messaging_postbacks,messaging_optins',
+                ]);
+
+            if ($subscribeRes->successful()) {
+                Log::info('Messenger OAuth: page subscribed to app webhooks', [
+                    'page_id'   => $page['id'],
+                    'page_name' => $page['name'],
+                    'result'    => $subscribeRes->json(),
+                ]);
+            } else {
+                Log::warning('Messenger OAuth: page webhook subscription failed (non-fatal)', [
+                    'page_id'   => $page['id'],
+                    'page_name' => $page['name'],
+                    'status'    => $subscribeRes->status(),
+                    'body'      => $subscribeRes->json(),
+                ]);
+            }
+
             return redirect()->route('dashboard.user.integrations.index')
                 ->with(['type' => 'success', 'message' => trans('Facebook Page connected successfully.')]);
 
@@ -121,4 +145,51 @@ class MessengerOAuthController extends Controller
     {
         return route('dashboard.user.integrations.messenger.callback');
     }
-}
+
+    /**
+     * One-time fix: subscribe all existing connected Messenger pages to the App's webhooks.
+     * Visit: GET /dashboard/user/integrations/messenger/resubscribe
+     * This is needed for pages connected before the subscription call was added to callback().
+     */
+    public function resubscribeAll()
+    {
+        $user = Auth::user();
+
+        $accounts = \App\Models\ConnectedAccount::query()
+            ->where('user_id', $user->id)
+            ->where('platform', 'messenger')
+            ->where('connection_status', 'connected')
+            ->get();
+
+        if ($accounts->isEmpty()) {
+            return back()->with(['type' => 'error', 'message' => 'No connected Messenger accounts found.']);
+        }
+
+        $results = [];
+
+        foreach ($accounts as $account) {
+            $pageId    = $account->account_identifier;
+            $pageToken = $account->access_token;
+
+            if (!$pageToken) {
+                $results[] = "Page {$pageId}: SKIPPED (no token)";
+                continue;
+            }
+
+            $res = Http::withToken($pageToken)
+                ->post("https://graph.facebook.com/v18.0/{$pageId}/subscribed_apps", [
+                    'subscribed_fields' => 'feed,messages,messaging_postbacks,messaging_optins',
+                ]);
+
+            if ($res->successful()) {
+                Log::info('resubscribeAll: page subscribed', ['page_id' => $pageId, 'result' => $res->json()]);
+                $results[] = "Page {$pageId} ({$account->account_name}): SUCCESS " . json_encode($res->json());
+            } else {
+                Log::error('resubscribeAll: page subscription failed', ['page_id' => $pageId, 'status' => $res->status(), 'body' => $res->json()]);
+                $results[] = "Page {$pageId} ({$account->account_name}): FAILED {$res->status()} " . $res->body();
+            }
+        }
+
+        return response('<pre>' . implode("\n", $results) . '</pre>')
+            ->header('Content-Type', 'text/html');
+    }
