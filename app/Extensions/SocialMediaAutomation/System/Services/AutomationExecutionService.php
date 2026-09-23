@@ -929,10 +929,15 @@ class AutomationExecutionService
         }
 
         $body = $response->body();
+        $json = $response->json();
+        
         Log::error("{$context} failed", [
             'status' => $response->status(),
             'body'   => $body,
             'body_preview' => substr($body, 0, 500),
+            'error_code' => $json['error']['code'] ?? null,
+            'error_message' => $json['error']['message'] ?? null,
+            'error_type' => $json['error']['type'] ?? null,
         ]);
 
         throw new RuntimeException("{$context} failed with status {$response->status()}: {$body}");
