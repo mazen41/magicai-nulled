@@ -185,11 +185,18 @@ class FacebookController extends Controller
 
     public function webhook(Request $request)
     {
+        Log::info('[FB WEBHOOK] REQUEST RECEIVED', [
+            'method' => $request->method(),
+            'url' => $request->fullUrl(),
+            'ip' => $request->ip(),
+            'has_payload' => $request->hasContent(),
+        ]);
+
         // GET: Verification handshake
         if ($request->isMethod('GET')) {
             $verify_token = setting('FACEBOOK_WEBHOOK_SECRET', 'default-password');
 
-            Log::info('Facebook webhook verification attempt', [
+            Log::info('[FB WEBHOOK] Verification attempt', [
                 'hub_mode'         => $request->get('hub_mode'),
                 'hub_verify_token' => $request->get('hub_verify_token'),
                 'expected_token'   => $verify_token,
@@ -206,7 +213,7 @@ class FacebookController extends Controller
 
         // POST: Process incoming webhook events
         if ($request->isMethod('POST')) {
-            Log::info('Facebook webhook POST received', [
+            Log::info('[FB WEBHOOK] POST received', [
                 'payload' => $request->json()->all(),
             ]);
 
@@ -217,7 +224,7 @@ class FacebookController extends Controller
                     $appSecret = setting('FACEBOOK_APP_SECRET');
 
                     if ($appSecret && ! $processor->verifySignature($request, $appSecret)) {
-                        Log::warning('Facebook webhook signature verification failed', [
+                        Log::warning('[FB WEBHOOK] Signature verification failed', [
                             'signature_header' => $request->header('X-Hub-Signature-256'),
                         ]);
 
@@ -226,12 +233,13 @@ class FacebookController extends Controller
 
                     $processor->processFacebookPayload($request->json()->all());
                 } else {
-                    Log::warning('Facebook webhook: SocialMediaAutomation extension not found');
+                    Log::warning('[FB WEBHOOK] SocialMediaAutomation extension not found');
                 }
             } catch (Throwable $e) {
-                Log::error('Facebook webhook processing failed', [
+                Log::error('[FB WEBHOOK] Processing failed', [
                     'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
                 ]);
             }
 

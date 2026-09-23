@@ -25,7 +25,7 @@ class AutomationExecutionService
     {
         $accountId = $payload['account_id'] ?? null;
 
-        Log::info('[FB AUTOMATION] Processing comment event', [
+        Log::info('[FB AUTOMATION DEBUG] Processing comment event', [
             'platform'   => $platform,
             'account_id' => $accountId,
             'post_id'    => $payload['post_id'] ?? null,
@@ -35,11 +35,53 @@ class AutomationExecutionService
 
         // IMPORTANT: Current implementation uses SocialMediaPlatform only
         // This might be the root cause if automation uses ConnectedAccount
-        Log::warning('[FB AUTOMATION] Checking SocialMediaPlatform-based automations (legacy only)', [
+        Log::warning('[FB AUTOMATION DEBUG] Checking SocialMediaPlatform-based automations (legacy only)', [
             'platform' => $platform,
             'account_id' => $accountId,
             'note' => 'This does NOT check ConnectedAccount-based automations',
         ]);
+
+        // Also check for ConnectedAccount-based automations
+        $connectedAccount = \App\Models\ConnectedAccount::query()
+            ->where('platform', $platform)
+            ->where('account_identifier', $accountId)
+            ->where('connection_status', 'connected')
+            ->first();
+
+        if ($connectedAccount) {
+            Log::info('[FB AUTOMATION DEBUG] CONNECTED ACCOUNT RESOLVED', [
+                'connected_account_id' => $connectedAccount->id,
+                'account_name' => $connectedAccount->account_name,
+                'username' => $connectedAccount->account_username,
+                'platform' => $connectedAccount->platform,
+                'account_identifier' => $connectedAccount->account_identifier,
+                'connection_status' => $connectedAccount->connection_status,
+            ]);
+        } else {
+            Log::warning('[FB AUTOMATION DEBUG] CONNECTED ACCOUNT NOT FOUND', [
+                'platform' => $platform,
+                'account_id' => $accountId,
+            ]);
+        }
+
+        // Check if automation #1 exists and its configuration
+        $automation1 = Automation::query()->find(1);
+        if ($automation1) {
+            Log::info('[FB AUTOMATION DEBUG] AUTOMATION #1 LOADED', [
+                'automation_id' => $automation1->id,
+                'name' => $automation1->name,
+                'status' => $automation1->status,
+                'social_media_platform_id' => $automation1->social_media_platform_id,
+                'trigger_target' => $automation1->trigger_target,
+                'trigger_post_id' => $automation1->trigger_post_id,
+                'keyword_mode' => $automation1->keyword_mode,
+                'include_keywords' => $automation1->include_keywords ?? [],
+                'exclude_keywords' => $automation1->exclude_keywords ?? [],
+                'actions_count' => $automation1->actions()->count(),
+            ]);
+        } else {
+            Log::warning('[FB AUTOMATION DEBUG] Automation #1 not found');
+        }
 
         $automations = Automation::query()
             ->where('status', 'live')
@@ -80,7 +122,7 @@ class AutomationExecutionService
         }
 
         foreach ($automations as $automation) {
-            Log::info('[FB AUTOMATION] AUTOMATION LOADED', [
+            Log::info('[FB AUTOMATION DEBUG] AUTOMATION LOADED', [
                 'automation_id' => $automation->id,
                 'name' => $automation->name,
                 'status' => $automation->status,
@@ -96,7 +138,7 @@ class AutomationExecutionService
 
             $matched = $this->matchesTrigger($automation, $payload);
 
-            Log::info('[FB AUTOMATION] TRIGGER EVALUATION', [
+            Log::info('[FB AUTOMATION DEBUG] TRIGGER EVALUATION', [
                 'automation_id' => $automation->id,
                 'comment_text' => $payload['text'] ?? '',
                 'keyword_mode' => $automation->keyword_mode,
@@ -106,6 +148,10 @@ class AutomationExecutionService
             ]);
 
             if ($matched) {
+                Log::info('[FB AUTOMATION DEBUG] TRIGGER MATCHED - Creating pending automation', [
+                    'automation_id' => $automation->id,
+                ]);
+
                 $delay = max(0, $automation->delay_seconds);
 
                 PendingAutomation::query()->create([
@@ -115,7 +161,7 @@ class AutomationExecutionService
                     'status'        => 'pending',
                 ]);
 
-                Log::info('[FB AUTOMATION] PENDING AUTOMATION CREATED', [
+                Log::info('[FB AUTOMATION DEBUG] PENDING AUTOMATION CREATED', [
                     'automation_id' => $automation->id,
                     'execute_at' => now()->addSeconds($delay)->toDateTimeString(),
                     'delay_seconds' => $delay,
@@ -131,7 +177,7 @@ class AutomationExecutionService
      */
     public function matchesTrigger(Automation $automation, array $commentData): bool
     {
-        Log::info('[FB AUTOMATION] Trigger matching check', [
+        Log::info('[FB AUTOMATION DEBUG] Trigger matching check', [
             'automation_id' => $automation->id,
             'trigger_target' => $automation->trigger_target,
             'trigger_post_id' => $automation->trigger_post_id,
@@ -143,7 +189,7 @@ class AutomationExecutionService
             $postId = $commentData['post_id'] ?? null;
 
             if ($postId !== $automation->trigger_post_id) {
-                Log::debug('[FB AUTOMATION] Trigger mismatch: post_id does not match', [
+                Log::debug('[FB AUTOMATION DEBUG] Trigger mismatch: post_id does not match', [
                     'automation_id'   => $automation->id,
                     'expected_post'   => $automation->trigger_post_id,
                     'received_post'   => $postId,
@@ -164,7 +210,7 @@ class AutomationExecutionService
                 foreach ($includeKeywords as $keyword) {
                     if (str_contains($commentText, strtolower($keyword))) {
                         $found = true;
-                        Log::info('[FB AUTOMATION] Include keyword matched', [
+                        Log::info('[FB AUTOMATION DEBUG] Include keyword matched', [
                             'automation_id' => $automation->id,
                             'keyword' => $keyword,
                         ]);
@@ -173,7 +219,7 @@ class AutomationExecutionService
                     }
                 }
                 if (! $found) {
-                    Log::debug('[FB AUTOMATION] Trigger mismatch: no include keyword found in comment', [
+                    Log::debug('[FB AUTOMATION DEBUG] Trigger mismatch: no include keyword found in comment', [
                         'automation_id'    => $automation->id,
                         'comment_text'     => $commentText,
                         'include_keywords' => $includeKeywords,
@@ -187,7 +233,7 @@ class AutomationExecutionService
             $excludeKeywords = $automation->exclude_keywords ?? [];
             foreach ($excludeKeywords as $keyword) {
                 if (str_contains($commentText, strtolower($keyword))) {
-                    Log::debug('[FB AUTOMATION] Trigger mismatch: exclude keyword found in comment', [
+                    Log::debug('[FB AUTOMATION DEBUG] Trigger mismatch: exclude keyword found in comment', [
                         'automation_id'   => $automation->id,
                         'comment_text'    => $commentText,
                         'matched_keyword' => $keyword,
@@ -198,7 +244,7 @@ class AutomationExecutionService
             }
         }
 
-        Log::info('[FB AUTOMATION] Trigger matched successfully', [
+        Log::info('[FB AUTOMATION DEBUG] Trigger matched successfully', [
             'automation_id' => $automation->id,
         ]);
 

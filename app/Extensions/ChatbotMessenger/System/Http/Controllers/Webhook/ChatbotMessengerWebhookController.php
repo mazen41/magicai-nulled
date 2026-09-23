@@ -23,6 +23,14 @@ class ChatbotMessengerWebhookController extends Controller
      */
     public function handleGlobal(Request $request)
     {
+        Log::info('[FB WEBHOOK DEBUG] REQUEST RECEIVED', [
+            'method' => $request->method(),
+            'url' => $request->fullUrl(),
+            'content_type' => $request->header('Content-Type'),
+            'object' => $request->input('object'),
+            'entry_count' => count($request->input('entry', [])),
+        ]);
+
         // Handle Meta webhook verification (GET)
         if ($request->isMethod('get')) {
             return $this->verifyWebhookSubscription($request);
@@ -30,7 +38,7 @@ class ChatbotMessengerWebhookController extends Controller
 
         // Only process 'page' object webhooks
         if ($request->input('object') !== 'page') {
-            Log::info('Messenger webhook: ignoring non-page object', [
+            Log::info('[FB WEBHOOK DEBUG] Ignoring non-page object', [
                 'object' => $request->input('object'),
             ]);
             return response('OK', 200);
@@ -38,16 +46,63 @@ class ChatbotMessengerWebhookController extends Controller
 
         $pageId   = data_get($request->input('entry.0'), 'id');
         $messaging = $request->input('entry.0.messaging.0');
+        $changes = $request->input('entry.0.changes', []);
 
-        Log::info('Messenger webhook POST received', [
-            'page_id'        => $pageId,
-            'has_messaging'  => !empty($messaging),
+        Log::info('[FB WEBHOOK DEBUG] Page event received', [
+            'page_id' => $pageId,
+            'has_messaging' => !empty($messaging),
+            'has_changes' => !empty($changes),
+            'change_count' => count($changes),
             'messaging_keys' => $messaging ? array_keys($messaging) : [],
         ]);
 
+        // CHECK FOR FEED EVENTS AND ROUTE TO AUTOMATION PROCESSOR
+        if (!empty($changes)) {
+            foreach ($changes as $change) {
+                $field = $change['field'] ?? '';
+                $value = $change['value'] ?? [];
+
+                if ($field === 'feed') {
+                    Log::info('[FB WEBHOOK DEBUG] FEED EVENT - Routing to SocialMediaAutomation processor', [
+                        'page_id' => $pageId,
+                        'item' => $value['item'] ?? null,
+                        'verb' => $value['verb'] ?? null,
+                    ]);
+
+                    // Try to process feed events via SocialMediaAutomation
+                    if (class_exists(\App\Extensions\SocialMediaAutomation\System\Services\WebhookProcessor::class)) {
+                        try {
+                            $processor = app(\App\Extensions\SocialMediaAutomation\System\Services\WebhookProcessor::class);
+                            $processor->processFacebookPayload($request->json()->all());
+                            Log::info('[FB WEBHOOK DEBUG] Feed event processed by SocialMediaAutomation');
+                        } catch (\Throwable $e) {
+                            Log::error('[FB WEBHOOK DEBUG] SocialMediaAutomation processing failed', [
+                                'error' => $e->getMessage(),
+                                'file' => $e->getFile(),
+                                'line' => $e->getLine(),
+                            ]);
+                        }
+                    } else {
+                        Log::warning('[FB WEBHOOK DEBUG] SocialMediaAutomation extension not found');
+                    }
+
+                    // Return after processing feed event
+                    return response('OK', 200);
+                }
+            }
+        }
+
+        // Original messaging event handling continues below
+        $messaging = $request->input('entry.0.messaging.0');
+
         if (!$pageId) {
-            Log::warning('Messenger webhook missing page ID in entry.0.id');
+            Log::warning('[FB WEBHOOK DEBUG] Missing page ID in entry.0.id');
             return response('Bad Request', 400);
+        }
+
+        if (!$messaging) {
+            Log::info('[FB WEBHOOK DEBUG] No messaging entry, skipping (this was a feed event)');
+            return response('OK', 200);
         }
 
         // Look up the ConnectedAccount for this page
