@@ -176,6 +176,14 @@ class AuthenticatedSessionController extends Controller
             'session_all' => session()->all(),
         ]);
 
+        \Log::info('[LOGIN] Cookie configuration', [
+            'session_domain' => config('session.domain'),
+            'session_path' => config('session.path'),
+            'session_secure' => config('session.secure'),
+            'session_http_only' => config('session.http_only'),
+            'session_same_site' => config('session.same_site'),
+        ]);
+
         return $response;
     }
 
