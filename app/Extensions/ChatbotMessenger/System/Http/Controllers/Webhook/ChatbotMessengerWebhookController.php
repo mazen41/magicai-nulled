@@ -17,6 +17,23 @@ class ChatbotMessengerWebhookController extends Controller
     ) {}
 
     /**
+     * Test endpoint to verify webhook is accessible
+     */
+    public function test()
+    {
+        Log::info('[FB WEBHOOK TEST] Test endpoint accessed', [
+            'timestamp' => now()->toIso8601String(),
+            'ip' => request()->ip(),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Webhook endpoint is accessible',
+            'timestamp' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
      * Global webhook handler that routes via ConnectedAccount
      * GET: Meta webhook verification
      * POST: Handle actual Facebook Messenger events

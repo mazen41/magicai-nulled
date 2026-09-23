@@ -260,7 +260,14 @@ class AutomationExecutionService
     {
         $commentId = $commenterData['comment_id'] ?? null;
 
-        Log::info('[FB AUTOMATION] Executing automation actions', [
+        Log::info('[FB AUTOMATION DEBUG] AUTOMATION ENGINE ENTERED', [
+            'automation_id' => $automation->id,
+            'user_id' => $automation->user_id,
+            'platform' => $automation->platform->platform ?? null,
+            'status' => $automation->status,
+        ]);
+
+        Log::info('[FB AUTOMATION DEBUG] Executing automation actions', [
             'automation_id' => $automation->id,
             'comment_id'    => $commentId,
             'commenter_id'  => $commenterData['commenter_id'] ?? null,
@@ -276,7 +283,7 @@ class AutomationExecutionService
                 ->exists();
 
             if ($exists) {
-                Log::info('[FB AUTOMATION] Automation skipped: already executed for this comment', [
+                Log::info('[FB AUTOMATION DEBUG] Automation skipped: already executed for this comment', [
                     'automation_id' => $automation->id,
                     'comment_id'    => $commentId,
                 ]);
@@ -294,7 +301,7 @@ class AutomationExecutionService
             'status'              => 'success',
         ]);
 
-        Log::info('[FB AUTOMATION] EXECUTION RECORD CREATED', [
+        Log::info('[FB AUTOMATION DEBUG] EXECUTION RECORD CREATED', [
             'automation_id' => $automation->id,
             'log_id' => $log->id,
         ]);
@@ -302,7 +309,7 @@ class AutomationExecutionService
         try {
             $variables = $this->buildVariables($commenterData);
 
-            Log::info('[FB AUTOMATION] Variables built', [
+            Log::info('[FB AUTOMATION DEBUG] Variables built', [
                 'variables' => array_keys($variables),
             ]);
 
@@ -310,7 +317,7 @@ class AutomationExecutionService
             if ($automation->enable_public_replies && $automation->replies->isNotEmpty()) {
                 $replyText = $automation->replies->random()->content;
                 $replyText = $this->substituteVariables($replyText, $variables);
-                Log::info('[FB AUTOMATION] Sending public reply', [
+                Log::info('[FB AUTOMATION DEBUG] Sending public reply', [
                     'reply_length' => strlen($replyText),
                 ]);
                 $this->sendPublicReply(
@@ -326,10 +333,20 @@ class AutomationExecutionService
                     $automation->actions->toArray(),
                     $variables
                 );
-                Log::info('[FB AUTOMATION] Sending DM', [
+
+                Log::info('[FB AUTOMATION DEBUG] ACTION EXECUTION', [
+                    'automation_id' => $automation->id,
+                    'action_type' => $automation->actions->first()->type ?? null,
+                    'platform' => $automation->platform->platform ?? null,
+                    'action_config_keys' => array_keys($automation->actions->first()->content ?? []),
+                    'message_template' => $automation->actions->first()->content['text'] ?? null,
+                ]);
+
+                Log::info('[FB AUTOMATION DEBUG] Sending DM', [
                     'actions_count' => count($processedActions),
                     'action_types' => array_column($processedActions, 'type'),
                 ]);
+
                 $this->sendDm(
                     $automation->platform,
                     $commenterData,
@@ -341,11 +358,11 @@ class AutomationExecutionService
                 'actions_executed' => $automation->actions->pluck('type')->toArray(),
             ]);
 
-            Log::info('[FB AUTOMATION] EXECUTION COMPLETED SUCCESSFULLY', [
+            Log::info('[FB AUTOMATION DEBUG] EXECUTION COMPLETED SUCCESSFULLY', [
                 'automation_id' => $automation->id,
             ]);
         } catch (Throwable $e) {
-            Log::error('[FB AUTOMATION] EXECUTION FAILED', [
+            Log::error('[FB AUTOMATION DEBUG] EXECUTION FAILED', [
                 'automation_id' => $automation->id,
                 'error'         => $e->getMessage(),
                 'file'          => $e->getFile(),
@@ -550,22 +567,28 @@ class AutomationExecutionService
     {
         $accessToken = $platform->credentials['access_token'] ?? null;
 
-        Log::info('[FB AUTOMATION] Sending Facebook DM', [
-            'platform_id'   => $platform->id,
-            'comment_id'    => $commentId,
-            'has_token'     => ! empty($accessToken),
-            'actions_count' => count($actions),
-            'action_types'  => array_column($actions, 'type'),
+        Log::info('[FB AUTOMATION DEBUG] RECIPIENT RESOLUTION', [
+            'source_commenter_id' => $commentId,
+            'resolved_recipient_id' => $commentId,
+            'resolution_method' => 'using comment_id as recipient (Private Reply API)',
+            'success' => !empty($commentId),
+        ]);
+
+        Log::info('[FB AUTOMATION DEBUG] SEND DM START', [
+            'page_id' => $platform->credentials['platform_id'] ?? null,
+            'recipient_id_masked' => $commentId ? substr($commentId, 0, 8) . '...' : 'MISSING',
+            'message_length' => strlen($actions[0]['content']['text'] ?? ''),
+            'automation_id' => $platform->id,
         ]);
 
         if (! $accessToken) {
-            Log::warning('[FB AUTOMATION] Facebook DM skipped: missing access token', ['platform_id' => $platform->id]);
+            Log::warning('[FB AUTOMATION DEBUG] Facebook DM skipped: missing access token', ['platform_id' => $platform->id]);
 
             return;
         }
 
         if (! $commentId) {
-            Log::warning('[FB AUTOMATION] Facebook DM skipped: missing comment_id', ['platform_id' => $platform->id]);
+            Log::warning('[FB AUTOMATION DEBUG] Facebook DM skipped: missing comment_id', ['platform_id' => $platform->id]);
 
             return;
         }
@@ -576,7 +599,7 @@ class AutomationExecutionService
         foreach ($actions as $action) {
             if ($action['type'] === 'delay') {
                 $seconds = min((int) ($action['content']['seconds'] ?? 1), 60);
-                Log::debug('[FB AUTOMATION] Facebook DM delay action', ['seconds' => $seconds]);
+                Log::debug('[FB AUTOMATION DEBUG] Facebook DM delay action', ['seconds' => $seconds]);
                 sleep($seconds);
 
                 continue;
@@ -585,12 +608,12 @@ class AutomationExecutionService
             $message = $this->buildFacebookMessage($action);
 
             if (! $message) {
-                Log::debug('[FB AUTOMATION] Facebook DM action skipped: unsupported type', ['type' => $action['type'] ?? null]);
+                Log::debug('[FB AUTOMATION DEBUG] Facebook DM action skipped: unsupported type', ['type' => $action['type'] ?? null]);
 
                 continue;
             }
 
-            Log::info('[FB AUTOMATION] FACEBOOK GRAPH API REQUEST', [
+            Log::info('[FB AUTOMATION DEBUG] FACEBOOK GRAPH API REQUEST', [
                 'endpoint' => "{$baseUrl}/me/messages",
                 'method' => 'POST',
                 'recipient_comment_id' => $commentId,
@@ -603,19 +626,19 @@ class AutomationExecutionService
                 'message'   => $message,
             ]);
 
-            Log::info('[FB AUTOMATION] FACEBOOK GRAPH API RESPONSE', [
+            Log::info('[FB AUTOMATION DEBUG] FACEBOOK GRAPH API RESPONSE', [
                 'http_status' => $response->status(),
                 'successful' => $response->successful(),
                 'body_keys' => array_keys($response->json() ?? []),
             ]);
 
             if (!$response->successful()) {
-                Log::error('[FB AUTOMATION] FACEBOOK GRAPH API FAILED', [
+                Log::error('[FB AUTOMATION DEBUG] FACEBOOK GRAPH API FAILED', [
                     'http_status' => $response->status(),
                     'error' => $response->json(),
                 ]);
             } else {
-                Log::info('[FB AUTOMATION] FACEBOOK DM SENT SUCCESSFULLY', [
+                Log::info('[FB AUTOMATION DEBUG] FACEBOOK DM SENT SUCCESSFULLY', [
                     'message_id' => $response->json('message_id'),
                 ]);
             }
