@@ -129,9 +129,12 @@ class MessengerOAuthController extends Controller
                 ->first();
 
             if ($legacyPlatform) {
-                $credentials = json_decode($legacyPlatform->credentials, true);
+                $credentials = $legacyPlatform->credentials;
+                if (is_string($credentials)) {
+                    $credentials = json_decode($credentials, true);
+                }
                 $credentials['access_token'] = $page['access_token'];
-                $legacyPlatform->credentials = json_encode($credentials);
+                $legacyPlatform->credentials = $credentials;
                 $legacyPlatform->save();
 
                 Log::info('Messenger OAuth: Updated legacy platform credentials', [
