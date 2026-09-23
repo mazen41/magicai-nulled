@@ -22,8 +22,15 @@ if ($user) {
     echo "Email confirmed: " . ($user->email_confirmed ? 'YES' : 'NO') . "\n";
     echo "Is admin: " . ($user->isAdmin() ? 'YES' : 'NO') . "\n";
     echo "Status: " . $user->status . "\n";
-    echo "2FA enabled: " . (\Google2FA::isActivatedFor($user) ? 'YES' : 'NO') . "\n";
     echo "Password hash check: " . (\Illuminate\Support\Facades\Hash::check('12345678', $user->password) ? 'CORRECT' : 'INCORRECT') . "\n";
+    
+    // Check 2FA - use the correct method
+    try {
+        $twoFaEnabled = \Google2FA::isActivated();
+        echo "2FA enabled (system): " . ($twoFaEnabled ? 'YES' : 'NO') . "\n";
+    } catch (\Exception $e) {
+        echo "2FA check error: " . $e->getMessage() . "\n";
+    }
 } else {
     echo "User not found with email admin@admin.com\n";
 }
