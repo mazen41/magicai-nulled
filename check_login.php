@@ -15,7 +15,7 @@ echo "dash_theme: " . ($settings->dash_theme ?? 'NULL') . "\n";
 echo "hard_redirect_to_user_dashboard: " . ($settings->hard_redirect_to_user_dashboard ?? 'NULL') . "\n";
 
 echo "\n=== CHECKING USER ACCOUNT ===\n";
-$user = \App\Models\User::where('email', 'your-email@example.com')->first(); // Replace with your email
+$user = \App\Models\User::where('email', 'admin@admin.com')->first();
 if ($user) {
     echo "User found: YES\n";
     echo "Email: " . $user->email . "\n";
@@ -23,8 +23,9 @@ if ($user) {
     echo "Is admin: " . ($user->isAdmin() ? 'YES' : 'NO') . "\n";
     echo "Status: " . $user->status . "\n";
     echo "2FA enabled: " . (\Google2FA::isActivatedFor($user) ? 'YES' : 'NO') . "\n";
+    echo "Password hash check: " . (\Illuminate\Support\Facades\Hash::check('12345678', $user->password) ? 'CORRECT' : 'INCORRECT') . "\n";
 } else {
-    echo "User not found. Replace 'your-email@example.com' with your actual email.\n";
+    echo "User not found with email admin@admin.com\n";
 }
 
 echo "\n=== DONE ===\n";
