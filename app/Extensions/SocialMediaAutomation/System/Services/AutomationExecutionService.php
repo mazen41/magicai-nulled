@@ -247,7 +247,10 @@ class AutomationExecutionService
             'automation_id'          => $automation->id,
             'platform'               => $platformName,
             'uses_connected_account' => !is_null($automation->connected_account_id),
+            'connected_account_id'    => $automation->connected_account_id,
+            'social_media_platform_id' => $automation->social_media_platform_id,
             'has_token'              => !empty($accessToken),
+            'token_length'            => $accessToken ? strlen($accessToken) : 0,
             'comment_id'             => $commentId,
             'actions_count'          => $automation->actions->count(),
             'enable_public_replies'  => $automation->enable_public_replies,
@@ -816,21 +819,25 @@ class AutomationExecutionService
         }
 
         $apiVersion = config('social-media.facebook.api_version', 'v18.0');
+        $url = "https://graph.facebook.com/{$apiVersion}/{$commentId}/comments";
 
         Log::info('[FB AUTOMATION] Attempting Facebook comment reply', [
             'comment_id' => $commentId,
             'reply_text' => $replyText,
             'api_version' => $apiVersion,
             'token_length' => strlen($accessToken),
+            'url' => $url,
+            'platform_id' => $platform->id,
+            'platform_page_id' => $platform->credentials['platform_id'] ?? null,
         ]);
 
         $response = $this->graphApiPost(
-            "https://graph.facebook.com/{$apiVersion}/{$commentId}/comments",
+            $url,
             $accessToken,
             ['message' => $replyText]
         );
 
-        $this->logApiResponse('Facebook comment reply', $response);
+        $this->logApiResponse('Facebook comment reply', $response, $url, $commentId);
     }
 
     /**
@@ -920,7 +927,7 @@ class AutomationExecutionService
     /**
      * Log the API response for debugging.
      */
-    private function logApiResponse(string $context, Response $response): void
+    private function logApiResponse(string $context, Response $response, string $url = null, string $commentId = null): void
     {
         if ($response->successful()) {
             Log::info("{$context} sent successfully", ['response' => $response->json()]);
@@ -933,11 +940,15 @@ class AutomationExecutionService
         
         Log::error("{$context} failed", [
             'status' => $response->status(),
-            'body'   => $body,
-            'body_preview' => substr($body, 0, 500),
+            'url' => $url,
+            'comment_id' => $commentId,
+            'http_status' => $response->status(),
             'error_code' => $json['error']['code'] ?? null,
-            'error_message' => $json['error']['message'] ?? null,
             'error_type' => $json['error']['type'] ?? null,
+            'error_message' => $json['error']['message'] ?? null,
+            'fbtrace_id' => $json['error']['fbtrace_id'] ?? null,
+            'error_subcode' => $json['error']['error_subcode'] ?? null,
+            'is_transient' => $json['error']['is_transient'] ?? null,
         ]);
 
         throw new RuntimeException("{$context} failed with status {$response->status()}: {$body}");
