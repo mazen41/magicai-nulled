@@ -102,9 +102,15 @@ class MessengerOAuthController extends Controller
                     'metadata' => [
                         'page_id'   => $page['id'],
                         'page_name' => $page['name'],
+                        'granted_permissions' => $request->input('granted_scopes', []),
                     ],
                 ]
             );
+
+            Log::info('Messenger OAuth: permissions granted', [
+                'page_id' => $page['id'],
+                'granted_scopes' => $request->input('granted_scopes'),
+            ]);
 
             // Subscribe the Page to our App's webhooks so Facebook starts
             // delivering feed (comments) and messages events to our webhook URL.

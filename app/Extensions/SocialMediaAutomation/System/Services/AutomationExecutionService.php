@@ -808,10 +808,21 @@ class AutomationExecutionService
         $accessToken = $platform->credentials['access_token'] ?? null;
 
         if (! $accessToken) {
+            Log::error('[FB AUTOMATION] No access token for Facebook comment reply', [
+                'platform_id' => $platform->id,
+                'comment_id' => $commentId,
+            ]);
             return;
         }
 
         $apiVersion = config('social-media.facebook.api_version', 'v18.0');
+
+        Log::info('[FB AUTOMATION] Attempting Facebook comment reply', [
+            'comment_id' => $commentId,
+            'reply_text' => $replyText,
+            'api_version' => $apiVersion,
+            'token_length' => strlen($accessToken),
+        ]);
 
         $response = $this->graphApiPost(
             "https://graph.facebook.com/{$apiVersion}/{$commentId}/comments",
@@ -917,11 +928,13 @@ class AutomationExecutionService
             return;
         }
 
+        $body = $response->body();
         Log::error("{$context} failed", [
             'status' => $response->status(),
-            'body'   => $response->body(),
+            'body'   => $body,
+            'body_preview' => substr($body, 0, 500),
         ]);
 
-        throw new RuntimeException("{$context} failed with status {$response->status()}");
+        throw new RuntimeException("{$context} failed with status {$response->status()}: {$body}");
     }
 }
