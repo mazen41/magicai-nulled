@@ -8,6 +8,7 @@ use App\Extensions\SocialMedia\System\Models\SocialMediaPlatform;
 use App\Extensions\SocialMediaAutomation\System\Models\Automation;
 use App\Extensions\SocialMediaAutomation\System\Models\AutomationLog;
 use App\Extensions\SocialMediaAutomation\System\Models\PendingAutomation;
+use App\Models\ConnectedAccount;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -19,13 +20,15 @@ class AutomationExecutionService
     /**
      * Process an incoming comment event from a platform webhook.
      *
+     * Checks BOTH legacy (SocialMediaPlatform) and new (ConnectedAccount) automations.
+     *
      * @param  array<string, mixed>  $payload
      */
     public function processCommentEvent(string $platform, array $payload): void
     {
         $accountId = $payload['account_id'] ?? null;
 
-        Log::info('[FB AUTOMATION DEBUG] Processing comment event', [
+        Log::info('[FB AUTOMATION] processCommentEvent', [
             'platform'   => $platform,
             'account_id' => $accountId,
             'post_id'    => $payload['post_id'] ?? null,
@@ -33,125 +36,43 @@ class AutomationExecutionService
             'text'       => $payload['text'] ?? '',
         ]);
 
-        // IMPORTANT: Current implementation uses SocialMediaPlatform only
-        // This might be the root cause if automation uses ConnectedAccount
-        Log::warning('[FB AUTOMATION DEBUG] Checking SocialMediaPlatform-based automations (legacy only)', [
-            'platform' => $platform,
+        $automations = $this->resolveAutomations($platform, $accountId);
+
+        Log::info('[FB AUTOMATION] Automations resolved', [
+            'platform'   => $platform,
             'account_id' => $accountId,
-            'note' => 'This does NOT check ConnectedAccount-based automations',
-        ]);
-
-        // Also check for ConnectedAccount-based automations
-        $connectedAccount = \App\Models\ConnectedAccount::query()
-            ->where('platform', $platform)
-            ->where('account_identifier', $accountId)
-            ->where('connection_status', 'connected')
-            ->first();
-
-        if ($connectedAccount) {
-            Log::info('[FB AUTOMATION DEBUG] CONNECTED ACCOUNT RESOLVED', [
-                'connected_account_id' => $connectedAccount->id,
-                'account_name' => $connectedAccount->account_name,
-                'username' => $connectedAccount->account_username,
-                'platform' => $connectedAccount->platform,
-                'account_identifier' => $connectedAccount->account_identifier,
-                'connection_status' => $connectedAccount->connection_status,
-            ]);
-        } else {
-            Log::warning('[FB AUTOMATION DEBUG] CONNECTED ACCOUNT NOT FOUND', [
-                'platform' => $platform,
-                'account_id' => $accountId,
-            ]);
-        }
-
-        // Check if automation #1 exists and its configuration
-        $automation1 = Automation::query()->find(1);
-        if ($automation1) {
-            Log::info('[FB AUTOMATION DEBUG] AUTOMATION #1 LOADED', [
-                'automation_id' => $automation1->id,
-                'name' => $automation1->name,
-                'status' => $automation1->status,
-                'social_media_platform_id' => $automation1->social_media_platform_id,
-                'trigger_target' => $automation1->trigger_target,
-                'trigger_post_id' => $automation1->trigger_post_id,
-                'keyword_mode' => $automation1->keyword_mode,
-                'include_keywords' => $automation1->include_keywords ?? [],
-                'exclude_keywords' => $automation1->exclude_keywords ?? [],
-                'actions_count' => $automation1->actions()->count(),
-            ]);
-        } else {
-            Log::warning('[FB AUTOMATION DEBUG] Automation #1 not found');
-        }
-
-        $automations = Automation::query()
-            ->where('status', 'live')
-            ->whereHas('platform', function ($query) use ($platform, $accountId) {
-                $query->where('platform', $platform);
-                if ($accountId) {
-                    $query->where('credentials->platform_id', $accountId);
-                }
-            })
-            ->with(['actions', 'replies', 'platform'])
-            ->get();
-
-        Log::info('[FB AUTOMATION] Automations found for platform', [
-            'platform' => $platform,
-            'account_id' => $accountId,
-            'count'    => $automations->count(),
-            'ids'      => $automations->pluck('id')->toArray(),
+            'count'      => $automations->count(),
+            'ids'        => $automations->pluck('id')->toArray(),
         ]);
 
         if ($automations->isEmpty()) {
-            Log::warning('[FB AUTOMATION] NO AUTOMATIONS FOUND - checking platform data', [
-                'platform' => $platform,
+            Log::warning('[FB AUTOMATION] No live automations found for account', [
+                'platform'   => $platform,
                 'account_id' => $accountId,
-            ]);
-
-            // Check if any SocialMediaPlatform exists for this platform
-            $platforms = \App\Extensions\SocialMedia\System\Models\SocialMediaPlatform::query()
-                ->where('platform', $platform)
-                ->where('user_id', auth()->id())
-                ->get();
-
-            Log::info('[FB AUTOMATION] Available SocialMediaPlatforms', [
-                'platform' => $platform,
-                'count' => $platforms->count(),
-                'ids' => $platforms->pluck('id')->toArray(),
-                'platform_ids' => $platforms->pluck('credentials.platform_id')->toArray(),
             ]);
         }
 
         foreach ($automations as $automation) {
-            Log::info('[FB AUTOMATION DEBUG] AUTOMATION LOADED', [
-                'automation_id' => $automation->id,
-                'name' => $automation->name,
-                'status' => $automation->status,
+            Log::info('[FB AUTOMATION] Evaluating automation', [
+                'automation_id'            => $automation->id,
+                'name'                     => $automation->name,
+                'uses_connected_account'   => !is_null($automation->connected_account_id),
                 'social_media_platform_id' => $automation->social_media_platform_id,
-                'platform' => $automation->platform->platform ?? null,
-                'platform_id' => $automation->platform->id,
-                'platform_credentials_platform_id' => $automation->platform->credentials['platform_id'] ?? null,
-                'trigger_target' => $automation->trigger_target,
-                'keyword_mode' => $automation->keyword_mode,
-                'include_keywords' => $automation->include_keywords ?? [],
-                'actions_count' => $automation->actions->count(),
+                'connected_account_id'     => $automation->connected_account_id,
+                'trigger_target'           => $automation->trigger_target,
+                'keyword_mode'             => $automation->keyword_mode,
+                'include_keywords'         => $automation->include_keywords ?? [],
             ]);
 
             $matched = $this->matchesTrigger($automation, $payload);
 
-            Log::info('[FB AUTOMATION DEBUG] TRIGGER EVALUATION', [
+            Log::info('[FB AUTOMATION] Trigger result', [
                 'automation_id' => $automation->id,
-                'comment_text' => $payload['text'] ?? '',
-                'keyword_mode' => $automation->keyword_mode,
-                'include_keywords' => $automation->include_keywords ?? [],
-                'exclude_keywords' => $automation->exclude_keywords ?? [],
-                'matched' => $matched,
+                'comment_text'  => $payload['text'] ?? '',
+                'matched'       => $matched,
             ]);
 
             if ($matched) {
-                Log::info('[FB AUTOMATION DEBUG] TRIGGER MATCHED - Creating pending automation', [
-                    'automation_id' => $automation->id,
-                ]);
-
                 $delay = max(0, $automation->delay_seconds);
 
                 PendingAutomation::query()->create([
@@ -161,13 +82,65 @@ class AutomationExecutionService
                     'status'        => 'pending',
                 ]);
 
-                Log::info('[FB AUTOMATION DEBUG] PENDING AUTOMATION CREATED', [
+                Log::info('[FB AUTOMATION] Pending automation created', [
                     'automation_id' => $automation->id,
-                    'execute_at' => now()->addSeconds($delay)->toDateTimeString(),
+                    'execute_at'    => now()->addSeconds($delay)->toDateTimeString(),
                     'delay_seconds' => $delay,
                 ]);
             }
         }
+    }
+
+    /**
+     * Resolve live automations for a platform + account ID, checking BOTH:
+     *   1. Legacy SocialMediaPlatform (credentials->platform_id)
+     *   2. New ConnectedAccount (account_identifier)
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, Automation>
+     */
+    private function resolveAutomations(string $platform, ?string $accountId): \Illuminate\Database\Eloquent\Collection
+    {
+        // ── Path 1: legacy SocialMediaPlatform ──────────────────────────────
+        $legacyQuery = Automation::query()
+            ->where('status', 'live')
+            ->whereNotNull('social_media_platform_id')
+            ->whereNull('connected_account_id')
+            ->whereHas('platform', function ($q) use ($platform, $accountId) {
+                $q->where('platform', $platform);
+                if ($accountId) {
+                    // Facebook/Instagram store the page/account ID under credentials->platform_id
+                    $q->where('credentials->platform_id', $accountId);
+                }
+            })
+            ->with(['actions', 'replies', 'platform']);
+
+        // ── Path 2: ConnectedAccount ─────────────────────────────────────────
+        $connectedQuery = Automation::query()
+            ->where('status', 'live')
+            ->whereNotNull('connected_account_id')
+            ->whereHas('connectedAccount', function ($q) use ($platform, $accountId) {
+                $q->where('platform', $platform)
+                  ->where('connection_status', 'connected');
+                if ($accountId) {
+                    $q->where('account_identifier', $accountId);
+                }
+            })
+            ->with(['actions', 'replies', 'connectedAccount']);
+
+        // Merge both result sets; use a Collection union to avoid duplicates
+        $legacyResults    = $legacyQuery->get();
+        $connectedResults = $connectedQuery->get();
+
+        Log::info('[FB AUTOMATION] resolveAutomations breakdown', [
+            'platform'         => $platform,
+            'account_id'       => $accountId,
+            'legacy_count'     => $legacyResults->count(),
+            'connected_count'  => $connectedResults->count(),
+            'legacy_ids'       => $legacyResults->pluck('id')->toArray(),
+            'connected_ids'    => $connectedResults->pluck('id')->toArray(),
+        ]);
+
+        return $legacyResults->merge($connectedResults);
     }
 
     /**
@@ -260,20 +233,23 @@ class AutomationExecutionService
     {
         $commentId = $commenterData['comment_id'] ?? null;
 
-        Log::info('[FB AUTOMATION DEBUG] AUTOMATION ENGINE ENTERED', [
-            'automation_id' => $automation->id,
-            'user_id' => $automation->user_id,
-            'platform' => $automation->platform->platform ?? null,
-            'status' => $automation->status,
-        ]);
+        // Load the correct relationship if not already loaded
+        if ($automation->connected_account_id && ! $automation->relationLoaded('connectedAccount')) {
+            $automation->load('connectedAccount');
+        } elseif ($automation->social_media_platform_id && ! $automation->relationLoaded('platform')) {
+            $automation->load('platform');
+        }
 
-        Log::info('[FB AUTOMATION DEBUG] Executing automation actions', [
-            'automation_id' => $automation->id,
-            'comment_id'    => $commentId,
-            'commenter_id'  => $commenterData['commenter_id'] ?? null,
-            'platform'      => $automation->platform->platform ?? null,
-            'actions_count' => $automation->actions->count(),
-            'replies_count' => $automation->replies->count(),
+        $platformName = $automation->platform_name;
+        $accessToken  = $automation->access_token;
+
+        Log::info('[FB AUTOMATION] Executing actions', [
+            'automation_id'          => $automation->id,
+            'platform'               => $platformName,
+            'uses_connected_account' => !is_null($automation->connected_account_id),
+            'has_token'              => !empty($accessToken),
+            'comment_id'             => $commentId,
+            'actions_count'          => $automation->actions->count(),
         ]);
 
         if ($commentId) {
@@ -283,7 +259,7 @@ class AutomationExecutionService
                 ->exists();
 
             if ($exists) {
-                Log::info('[FB AUTOMATION DEBUG] Automation skipped: already executed for this comment', [
+                Log::info('[FB AUTOMATION] Already executed for this comment, skipping', [
                     'automation_id' => $automation->id,
                     'comment_id'    => $commentId,
                 ]);
@@ -301,68 +277,33 @@ class AutomationExecutionService
             'status'              => 'success',
         ]);
 
-        Log::info('[FB AUTOMATION DEBUG] EXECUTION RECORD CREATED', [
-            'automation_id' => $automation->id,
-            'log_id' => $log->id,
-        ]);
-
         try {
             $variables = $this->buildVariables($commenterData);
-
-            Log::info('[FB AUTOMATION DEBUG] Variables built', [
-                'variables' => array_keys($variables),
-            ]);
 
             // Send public reply if enabled
             if ($automation->enable_public_replies && $automation->replies->isNotEmpty()) {
                 $replyText = $automation->replies->random()->content;
                 $replyText = $this->substituteVariables($replyText, $variables);
-                Log::info('[FB AUTOMATION DEBUG] Sending public reply', [
-                    'reply_length' => strlen($replyText),
-                ]);
-                $this->sendPublicReply(
-                    $automation->platform,
-                    $commenterData['comment_id'] ?? '',
-                    $replyText
-                );
+                $this->sendPublicReplyForAutomation($automation, $commenterData['comment_id'] ?? '', $replyText);
             }
 
-            // Send DM actions with variable substitution
+            // Send DM actions
             if ($automation->actions->isNotEmpty()) {
                 $processedActions = $this->processActionsWithVariables(
                     $automation->actions->toArray(),
                     $variables
                 );
 
-                Log::info('[FB AUTOMATION DEBUG] ACTION EXECUTION', [
-                    'automation_id' => $automation->id,
-                    'action_type' => $automation->actions->first()->type ?? null,
-                    'platform' => $automation->platform->platform ?? null,
-                    'action_config_keys' => array_keys($automation->actions->first()->content ?? []),
-                    'message_template' => $automation->actions->first()->content['text'] ?? null,
-                ]);
-
-                Log::info('[FB AUTOMATION DEBUG] Sending DM', [
-                    'actions_count' => count($processedActions),
-                    'action_types' => array_column($processedActions, 'type'),
-                ]);
-
-                $this->sendDm(
-                    $automation->platform,
-                    $commenterData,
-                    $processedActions
-                );
+                $this->sendDmForAutomation($automation, $commenterData, $processedActions);
             }
 
             $log->update([
                 'actions_executed' => $automation->actions->pluck('type')->toArray(),
             ]);
 
-            Log::info('[FB AUTOMATION DEBUG] EXECUTION COMPLETED SUCCESSFULLY', [
-                'automation_id' => $automation->id,
-            ]);
+            Log::info('[FB AUTOMATION] Execution completed', ['automation_id' => $automation->id]);
         } catch (Throwable $e) {
-            Log::error('[FB AUTOMATION DEBUG] EXECUTION FAILED', [
+            Log::error('[FB AUTOMATION] Execution failed', [
                 'automation_id' => $automation->id,
                 'error'         => $e->getMessage(),
                 'file'          => $e->getFile(),
@@ -447,23 +388,102 @@ class AutomationExecutionService
      * @param  array<string, mixed>  $commenterData
      * @param  array<int, mixed>  $actions
      */
-    public function sendDm(SocialMediaPlatform $platform, array $commenterData, array $actions): void
+    /**
+     * Send a DM using whichever account system the automation uses.
+     * Routes to the legacy sendDm() or directly calls the platform method
+     * with a ConnectedAccount's credentials.
+     *
+     * @param  array<string, mixed>  $commenterData
+     * @param  array<int, mixed>  $actions
+     */
+    private function sendDmForAutomation(Automation $automation, array $commenterData, array $actions): void
     {
-        $platformName = $platform->platform;
+        // ConnectedAccount path
+        if ($automation->connected_account_id && $automation->relationLoaded('connectedAccount') && $automation->connectedAccount) {
+            $account      = $automation->connectedAccount;
+            $platformName = $account->platform;
+            $accessToken  = $account->access_token; // decrypted automatically
 
-        // Platform-specific DM sending
-        match ($platformName) {
-            'instagram' => $this->sendInstagramDm($platform, $commenterData['comment_id'] ?? '', $actions),
-            'facebook'  => $this->sendFacebookDm($platform, $commenterData['comment_id'] ?? '', $actions),
-            'x', 'twitter' => $this->sendXDm($platform, $commenterData['commenter_id'] ?? '', $actions),
-            default     => Log::warning("DM not supported for platform: {$platformName}"),
-        };
+            // Build a lightweight credential-holder that mimics SocialMediaPlatform
+            // by wrapping ConnectedAccount data into a plain object
+            $pseudoPlatform = new SocialMediaPlatform([
+                'platform'    => $platformName,
+                'credentials' => [
+                    'platform_id'  => $account->account_identifier,
+                    'access_token' => $accessToken,
+                ],
+            ]);
+
+            Log::info('[FB AUTOMATION] Sending DM via ConnectedAccount', [
+                'automation_id'      => $automation->id,
+                'platform'           => $platformName,
+                'connected_account'  => $account->id,
+                'has_token'          => !empty($accessToken),
+                'comment_id'         => $commenterData['comment_id'] ?? null,
+            ]);
+
+            $this->sendDm($pseudoPlatform, $commenterData, $actions);
+
+            return;
+        }
+
+        // Legacy SocialMediaPlatform path
+        if ($automation->social_media_platform_id && $automation->relationLoaded('platform') && $automation->platform) {
+            $this->sendDm($automation->platform, $commenterData, $actions);
+
+            return;
+        }
+
+        Log::error('[FB AUTOMATION] sendDmForAutomation: could not resolve platform credentials', [
+            'automation_id'            => $automation->id,
+            'connected_account_id'     => $automation->connected_account_id,
+            'social_media_platform_id' => $automation->social_media_platform_id,
+        ]);
     }
 
     /**
-     * Send a public reply to a comment via the platform API.
+     * Send a public reply using whichever account system the automation uses.
      */
-    public function sendPublicReply(SocialMediaPlatform $platform, string $commentId, string $replyText): void
+    private function sendPublicReplyForAutomation(Automation $automation, string $commentId, string $replyText): void
+    {
+        // ConnectedAccount path
+        if ($automation->connected_account_id && $automation->relationLoaded('connectedAccount') && $automation->connectedAccount) {
+            $account      = $automation->connectedAccount;
+            $accessToken  = $account->access_token;
+
+            $pseudoPlatform = new SocialMediaPlatform([
+                'platform'    => $account->platform,
+                'credentials' => [
+                    'platform_id'  => $account->account_identifier,
+                    'access_token' => $accessToken,
+                ],
+            ]);
+
+            $this->sendPublicReply($pseudoPlatform, $commentId, $replyText);
+
+            return;
+        }
+
+        // Legacy SocialMediaPlatform path
+        if ($automation->social_media_platform_id && $automation->relationLoaded('platform') && $automation->platform) {
+            $this->sendPublicReply($automation->platform, $commentId, $replyText);
+
+            return;
+        }
+
+        Log::error('[FB AUTOMATION] sendPublicReplyForAutomation: could not resolve platform credentials', [
+            'automation_id' => $automation->id,
+        ]);
+    }
+
+    /**
+     * Send a public reply to a comment on the given platform.
+     *
+     * @param  SocialMediaPlatform  $platform
+     * @param  string  $commentId
+     * @param  string  $replyText
+     */
+    private function sendPublicReply(SocialMediaPlatform $platform, string $commentId, string $replyText): void
     {
         $platformName = $platform->platform;
 
@@ -480,6 +500,28 @@ class AutomationExecutionService
     // ──────────────────────────────────────────────────────────
     //  Platform-specific DM implementations
     // ──────────────────────────────────────────────────────────
+
+    /**
+     * Dispatch a DM via the correct platform-specific method.
+     *
+     * Routes based on $platform->platform to the matching sendXxxDm() implementation.
+     *
+     * @param  array<string, mixed>  $commenterData
+     * @param  array<int, mixed>  $actions
+     */
+    private function sendDm(SocialMediaPlatform $platform, array $commenterData, array $actions): void
+    {
+        $platformName = $platform->platform;
+        $commentId    = $commenterData['comment_id'] ?? '';
+        $senderId     = $commenterData['commenter_id'] ?? '';
+
+        match ($platformName) {
+            'instagram'        => $this->sendInstagramDm($platform, $commentId, $actions),
+            'facebook', 'messenger' => $this->sendFacebookDm($platform, $commentId, $actions),
+            'x', 'twitter'    => $this->sendXDm($platform, $senderId, $actions),
+            default            => Log::warning("DM not supported for platform: {$platformName}"),
+        };
+    }
 
     /**
      * Send DM via Instagram Graph API Private Reply (POST /{ig-user-id}/messages).

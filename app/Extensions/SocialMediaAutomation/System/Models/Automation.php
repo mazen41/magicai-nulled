@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Extensions\SocialMediaAutomation\System\Models;
 
 use App\Extensions\SocialMedia\System\Models\SocialMediaPlatform;
+use App\Models\ConnectedAccount;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,7 @@ class Automation extends Model
     protected $fillable = [
         'user_id',
         'social_media_platform_id',
+        'connected_account_id',
         'name',
         'status',
         'trigger_target',
@@ -44,9 +46,68 @@ class Automation extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * Legacy relationship — SocialMediaPlatform (ext_social_media_platforms).
+     */
     public function platform(): BelongsTo
     {
         return $this->belongsTo(SocialMediaPlatform::class, 'social_media_platform_id');
+    }
+
+    /**
+     * New relationship — ConnectedAccount.
+     */
+    public function connectedAccount(): BelongsTo
+    {
+        return $this->belongsTo(ConnectedAccount::class, 'connected_account_id');
+    }
+
+    /**
+     * Platform string regardless of account system.
+     */
+    public function getPlatformNameAttribute(): ?string
+    {
+        if ($this->connected_account_id && $this->relationLoaded('connectedAccount')) {
+            return $this->connectedAccount?->platform;
+        }
+
+        if ($this->social_media_platform_id && $this->relationLoaded('platform')) {
+            return $this->platform?->platform;
+        }
+
+        return null;
+    }
+
+    /**
+     * Platform account identifier (Page ID, IG user ID, etc.).
+     */
+    public function getPlatformAccountIdAttribute(): ?string
+    {
+        if ($this->connected_account_id && $this->relationLoaded('connectedAccount')) {
+            return $this->connectedAccount?->account_identifier;
+        }
+
+        if ($this->social_media_platform_id && $this->relationLoaded('platform')) {
+            return $this->platform?->credentials['platform_id'] ?? null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Decrypted access token regardless of account system.
+     */
+    public function getAccessTokenAttribute(): ?string
+    {
+        if ($this->connected_account_id && $this->relationLoaded('connectedAccount')) {
+            return $this->connectedAccount?->access_token;
+        }
+
+        if ($this->social_media_platform_id && $this->relationLoaded('platform')) {
+            return $this->platform?->credentials['access_token'] ?? null;
+        }
+
+        return null;
     }
 
     public function actions(): HasMany
