@@ -43,11 +43,22 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): JsonResponse
     {
+        \Log::info('[LOGIN] Login attempt started', [
+            'email' => $request->email,
+            'ip' => $request->ip(),
+        ]);
+
         $settings = Setting::getCache();
         $email = $request->email;
         $user = User::where('email', $email)->first();
 
+        \Log::info('[LOGIN] User lookup', [
+            'user_found' => $user ? 'YES' : 'NO',
+            'user_id' => $user?->id,
+        ]);
+
         if ($settings->recaptcha_login && ($settings->recaptcha_sitekey || $settings->recaptcha_secretkey)) {
+            \Log::info('[LOGIN] Recaptcha check enabled');
             $response = (new Client)->post('https://www.google.com/recaptcha/api/siteverify', [
                 'form_params' => [
                     'secret'   => config('services.recaptcha.secret'),
@@ -56,16 +67,24 @@ class AuthenticatedSessionController extends Controller
             ])->getBody()->getContents();
 
             if (! json_decode($response, true)['success']) {
+                \Log::warning('[LOGIN] Recaptcha failed');
                 return response()->json(['status' => 'error', 'message' => __('Invalid Recaptcha.')], 401);
             }
         }
 
         if ($settings->login_without_confirmation == 0) {
+            \Log::info('[LOGIN] Email confirmation required', [
+                'user_confirmed' => $user?->email_confirmed,
+                'is_admin' => $user?->isAdmin(),
+            ]);
+            
             if (! $user) {
+                \Log::warning('[LOGIN] User not found');
                 return response()->json(['errors' => [trans('auth.failed')]], 401);
             }
 
             if (! $user->email_confirmed && ! $user->isAdmin()) {
+                \Log::info('[LOGIN] Sending confirmation email');
                 EmailConfirmation::forUser($user)->send();
 
                 return response()->json([
@@ -76,7 +95,10 @@ class AuthenticatedSessionController extends Controller
         }
 
         if ($settings->login_with_otp) {
+            \Log::info('[LOGIN] OTP login enabled');
+            
             if (! $user) {
+                \Log::warning('[LOGIN] User not found for OTP');
                 return response()->json(['errors' => [trans('auth.failed')]], 401);
             }
 
@@ -85,20 +107,34 @@ class AuthenticatedSessionController extends Controller
 
             try {
                 Mail::to($user->email)->send(new OtpEmail($user, $settings, $otp));
-            } catch (Exception) {
+                \Log::info('[LOGIN] OTP email sent');
+            } catch (Exception $e) {
+                \Log::error('[LOGIN] OTP email failed', ['error' => $e->getMessage()]);
                 return response()->json(['errors' => [__('Email could not be sent.')], 'type' => 'error'], 401);
             }
 
             return response()->json(['link' => '/verify-otp']);
         }
 
+        \Log::info('[LOGIN] Attempting authentication');
         $request->authenticate();
         $request->session()->regenerate();
+
+        \Log::info('[LOGIN] Authentication successful', [
+            'auth_check' => Auth::check(),
+        ]);
 
         if (Auth::check()) {
             $user = Auth::user();
 
+            \Log::info('[LOGIN] User authenticated', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'is_admin' => $user->isAdmin(),
+            ]);
+
             if (Google2FA::isActivated()) {
+                \Log::info('[LOGIN] 2FA enabled, redirecting to 2FA');
                 session(['user_id' => $user->id]);
                 Auth::logout();
 
@@ -106,9 +142,11 @@ class AuthenticatedSessionController extends Controller
             }
 
             event(new UsersActivityEvent($user->email, $user->type, $request->header('User-Agent')));
+            \Log::info('[LOGIN] Activity event fired');
         }
 
         if ((setting('frontend_additional_url_type') !== 'ai-image-pro') && (setting('dash_theme') === 'social-media-agent-dashboard')) {
+            \Log::info('[LOGIN] Redirecting to social media agent dashboard');
             return response()->json([
                 'link' => '/dashboard/user/social-media/agent',
             ]);
@@ -116,6 +154,12 @@ class AuthenticatedSessionController extends Controller
 
         $redirect = $request->get('redirect');
         $redirectUrl = $this->getRedirectUrl($redirect, $request->get('plan'));
+
+        \Log::info('[LOGIN] Determining redirect', [
+            'redirect_param' => $redirect,
+            'plan_param' => $request->get('plan'),
+            'redirect_url' => $redirectUrl,
+        ]);
 
         return response()->json(['link' => $redirectUrl]);
     }
