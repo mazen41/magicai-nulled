@@ -32,7 +32,7 @@ class MessengerOAuthController extends Controller
             'response_type' => 'code',
             'client_id'     => setting('INSTAGRAM_APP_ID'),
             'redirect_uri'  => $this->redirectUri(),
-            'scope'         => 'pages_messaging,pages_read_engagement,pages_show_list',
+            'scope'         => 'pages_messaging,pages_read_engagement,pages_show_list,pages_manage_posts',
             'state'         => $state,
         ];
 
