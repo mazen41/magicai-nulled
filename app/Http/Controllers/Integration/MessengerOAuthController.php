@@ -112,6 +112,17 @@ class MessengerOAuthController extends Controller
                 'granted_scopes' => $request->input('granted_scopes'),
             ]);
 
+            // Debug: Check token permissions
+            $debugResponse = Http::get("https://graph.facebook.com/v18.0/debug_token", [
+                'input_token' => $page['access_token'],
+                'access_token' => setting('INSTAGRAM_APP_ID') . '|' . setting('INSTAGRAM_APP_SECRET'),
+            ]);
+
+            Log::info('Messenger OAuth: token debug', [
+                'page_id' => $page['id'],
+                'debug_response' => $debugResponse->json(),
+            ]);
+
             // Subscribe the Page to our App's webhooks so Facebook starts
             // delivering feed (comments) and messages events to our webhook URL.
             // Without this call the App-level webhook URL is registered but
