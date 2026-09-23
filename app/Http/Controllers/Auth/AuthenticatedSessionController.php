@@ -46,6 +46,8 @@ class AuthenticatedSessionController extends Controller
         \Log::info('[LOGIN] Login attempt started', [
             'email' => $request->email,
             'ip' => $request->ip(),
+            'has_csrf' => $request->hasHeader('X-CSRF-TOKEN'),
+            'csrf_token' => $request->header('X-CSRF-TOKEN'),
         ]);
 
         $settings = Setting::getCache();
@@ -161,7 +163,14 @@ class AuthenticatedSessionController extends Controller
             'redirect_url' => $redirectUrl,
         ]);
 
-        return response()->json(['link' => $redirectUrl]);
+        $response = response()->json(['link' => $redirectUrl]);
+        
+        \Log::info('[LOGIN] Response sent', [
+            'status' => $response->status(),
+            'headers' => $response->headers->all(),
+        ]);
+
+        return $response;
     }
 
     /**
