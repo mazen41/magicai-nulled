@@ -13,9 +13,21 @@ class Authenticate extends Middleware
 {
     public function handle($request, Closure $next, ...$guards)
     {
+        \Log::info('[AUTH MIDDLEWARE] Request received', [
+            'url' => $request->url(),
+            'session_id' => session()->getId(),
+            'has_session' => session()->has('_token'),
+            'auth_check' => Auth::check(),
+        ]);
+
         $this->authenticate($request, $guards);
 
         $user = Auth::user();
+
+        \Log::info('[AUTH MIDDLEWARE] After authenticate', [
+            'user_id' => $user?->id,
+            'auth_check' => Auth::check(),
+        ]);
 
         // Skip early if no authenticated user
         if (! $user) {
