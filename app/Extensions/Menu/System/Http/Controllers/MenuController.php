@@ -140,6 +140,26 @@ class MenuController extends Controller
         ]);
     }
 
+    public function badge(Request $request, Menu $menu)
+    {
+        if (Helper::appIsDemo()) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => trans('This feature is disabled in demo mode.'),
+            ]);
+        }
+
+        $menu->update([
+            'badge' => $menu->getAttribute('badge') === 'new' ? null : 'new',
+        ]);
+
+        $this->service->regenerate();
+
+        return response()->json([
+            'message' => trans('Menu updated'),
+        ]);
+    }
+
     public function store(Request $request)
     {
         if (Helper::appIsDemo()) {

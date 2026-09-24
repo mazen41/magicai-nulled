@@ -168,54 +168,85 @@ class TiktokController extends Controller
 
     protected function setProfileInfo(SocialMediaPlatform|Model|Builder $item): void
     {
-        //        $userData = $this->api->getAccountInfo([
-        //            'open_id',
-        //        ])
-        //            ->throw()
-        //            ->json('data.user');
+        $userInfo = [];
+        try {
+            $userInfoResponse = $this->api->getAccountInfo([
+                'open_id',
+                'display_name',
+                'avatar_url',
+                'avatar_url_100',
+                'username',
+                'follower_count',
+                'followers_count',
+            ]);
+            $userInfo = $userInfoResponse->json('data.user', []) ?? [];
+        } catch (\Exception $e) {
+            \Log::warning('TikTok getAccountInfo exception: ' . $e->getMessage());
+        }
 
         $creatorInfoData = $this->api->getCreatorInfo();
-
         $creatorInfo = [];
-
         if (isset($creatorInfoData['error']['code']) && $creatorInfoData['error']['code'] === 'ok') {
             $creatorInfo = $creatorInfoData['data'] ?? [];
         }
 
+        $displayName = data_get($userInfo, 'display_name')
+            ?: data_get($creatorInfo, 'creator_nickname')
+            ?: data_get($userInfo, 'username')
+            ?: data_get($creatorInfo, 'creator_username')
+            ?: 'TikTok Account';
+
+        $username = data_get($userInfo, 'username')
+            ?: data_get($creatorInfo, 'creator_username')
+            ?: '';
+
+        $avatar = data_get($userInfo, 'avatar_url')
+            ?: data_get($userInfo, 'avatar_url_100')
+            ?: data_get($creatorInfo, 'creator_avatar_url')
+            ?: '';
+
         $followersCount = (int) (
-            data_get($creatorInfo, 'follower_count')
+            data_get($userInfo, 'follower_count')
+            ?? data_get($userInfo, 'followers_count')
+            ?? data_get($creatorInfo, 'follower_count')
             ?? data_get($creatorInfo, 'followers_count')
-            ?? data_get($creatorInfo, 'fan_count')
-            ?? data_get($creatorInfo, 'fans_count')
             ?? 0
         );
 
-        if ($followersCount === 0) {
-            $accountInfo = $this->api->getAccountInfo([
-                'open_id',
-                'follower_count',
-                'followers_count',
-                'fan_count',
-            ])->json('data.user', []);
-
-            $followersCount = (int) (
-                data_get($accountInfo, 'follower_count')
-                ?? data_get($accountInfo, 'followers_count')
-                ?? data_get($accountInfo, 'fan_count')
-                ?? data_get($accountInfo, 'fans_count')
-                ?? 0
-            );
-        }
-
         $item->update([
-            'credentials' => array_merge($item->credentials, [
-                'name'     => $creatorInfo['creator_nickname'] ?? '',
-                'username' => $creatorInfo['creator_username'] ?? '',
-                'picture'  => $creatorInfo['creator_avatar_url'] ?? '',
-                'meta'     => $creatorInfo ?? [],
+            'credentials' => array_merge($item->credentials ?? [], [
+                'name'     => $displayName,
+                'username' => $username,
+                'picture'  => $avatar,
+                'meta'     => array_merge($creatorInfo, $userInfo),
             ]),
             'followers_count' => $followersCount,
         ]);
+
+        $openId = data_get($item->credentials, 'platform_id') ?: (string) $item->id;
+        $accessToken = data_get($item->credentials, 'access_token', '');
+        $refreshToken = data_get($item->credentials, 'refresh_token', null);
+        $expiresAt = $item->expires_at;
+
+        if ($item->user_id && $accessToken) {
+            $user = \App\Models\User::find($item->user_id);
+            if ($user) {
+                app(\App\Services\OAuth\ConnectedAccountService::class)->createOrUpdate(
+                    $user,
+                    'tiktok',
+                    (string) $openId,
+                    (string) $accessToken,
+                    [
+                        'name'     => $displayName,
+                        'username' => $username,
+                        'avatar'   => $avatar,
+                        'metadata' => array_merge($creatorInfo, $userInfo),
+                    ],
+                    $refreshToken,
+                    $expiresAt
+                );
+            }
+        }
     }
 
     public function redirectToPlatforms(string $type = 'success', string $message = 'Tiktok account connected successfully.'): RedirectResponse

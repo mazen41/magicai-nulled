@@ -245,11 +245,17 @@ function activeRouteBulkShow(...$route_names)
 if (! function_exists('custom_theme_url')) {
     function custom_theme_url($url, $slash = false)
     {
+        if (empty($url)) {
+            return '';
+        }
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://') || str_starts_with($url, 'data:')) {
+            return $url;
+        }
         if (strpos($url, 'assets') !== false) {
             return theme_url($url);
         }
         if ($slash) {
-            return '/' . $url;
+            return '/' . ltrim($url, '/');
         }
 
         return $url;

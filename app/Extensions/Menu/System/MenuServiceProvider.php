@@ -43,6 +43,7 @@ class MenuServiceProvider extends ServiceProvider
                         Route::get('menu/{menu}/delete', 'delete')->name('delete');
                         Route::any('menu/{menu}/status', 'status')->name('status');
                         Route::any('menu/{menu}/bolt-menu', 'boltMenu')->name('bolt-menu');
+                        Route::any('menu/{menu}/badge', 'badge')->name('badge');
                         Route::post('menu/{menu}/{type}', 'update')->name('update');
                         Route::any('menu/order', 'order')->name('order');
                         Route::post('menu', 'store')->name('store');
