@@ -8,8 +8,9 @@
             $name = $isArray ? $platform['platform'] ?? null : $platform->platform ?? null;
 
             $image = asset('vendor/social-media/icons/' . $name . '.svg');
-            $image_dark_version = asset('vendor/social-media/icons/' . $name . '-light.svg');
-            $darkImageExists = file_exists(public_path($image_dark_version));
+            $image_dark_version = asset('vendor/social-media/icons/' . $name . '-mono-light.svg');
+            $darkPath = public_path('vendor/social-media/icons/' . $name . '-mono-light.svg');
+            $darkImageExists = file_exists($darkPath);
 
             if ($isArray) {
                 $platform = \Illuminate\Support\Arr::except($platform, $timestampKeys);

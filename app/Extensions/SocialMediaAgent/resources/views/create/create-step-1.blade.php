@@ -78,7 +78,7 @@
                                     />
                                 </template>
                             </figure>
-                            <span x-text="getPlatformById(platformId).credentials?.username ?? '{{ __('Unknown') }}'"></span>
+                            <span x-text="getPlatformById(platformId)?.credentials?.name ?? getPlatformById(platformId)?.credentials?.username ?? getPlatformById(platformId)?.credentials?.display_name ?? getPlatformById(platformId)?.platform ?? '{{ __('Unknown') }}'"></span>
                             <button
                                 class="inline-grid size-[17px] place-items-center rounded-full border p-0 transition hover:scale-110 hover:border-red-500 hover:bg-red-500 hover:text-white"
                                 @click.prevent.stop="formData.platform_ids = formData.platform_ids.filter(id => id !== platformId)"
@@ -104,7 +104,7 @@
                         @endif
                         @php
                             $image = 'vendor/social-media/icons/' . $platform->platform . '.svg';
-                            $image_dark_version = 'vendor/social-media/icons/' . $platform->platform . '-light.svg';
+                            $image_dark_version = 'vendor/social-media/icons/' . $platform->platform . '-mono-light.svg';
                             $darkImageExists = file_exists(public_path($image_dark_version));
                         @endphp
 
@@ -132,7 +132,7 @@
                                     />
                                 @endif
                             </figure>
-                            {{ data_get($platform->credentials, 'username', 'Unknown') }}
+                            {{ data_get($platform->credentials, 'name') ?? data_get($platform->credentials, 'username') ?? data_get($platform->credentials, 'display_name') ?? $platform->platformLabel() }}
                         </div>
                     @endforeach
                 </div>
