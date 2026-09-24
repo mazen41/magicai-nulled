@@ -13,7 +13,7 @@ return new class extends Migration
         DB::table('settings')->update([
             'tiktok_app_id' => '7688832632410408980',
             'tiktok_app_key' => 'sbawh2mlu605l92uts',
-            'tiktok_app_secret' => 'aKGXRnxyBVE17aH9CgHM1AAXHynW43',
+            'tiktok_app_secret' => 'aKGXRnxyBVE17alaH9CgHM1AAXHynV43',
         ]);
     }
 
