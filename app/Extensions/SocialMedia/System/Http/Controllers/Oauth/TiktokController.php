@@ -70,6 +70,30 @@ class TiktokController extends Controller
             }
 
             $tokenData = $response->object();
+            
+            // Log the response structure for debugging
+            \Log::info('TikTok token response structure', [
+                'response' => json_encode($tokenData),
+                'properties' => array_keys(get_object_vars($tokenData))
+            ]);
+
+            // Handle different TikTok API response structures
+            $openId = $tokenData->open_id ?? $tokenData->data->open_id ?? $tokenData->user_id ?? null;
+            $accessToken = $tokenData->access_token ?? $tokenData->data->access_token ?? null;
+            $expiresIn = $tokenData->expires_in ?? $tokenData->data->expires_in ?? 3600;
+            $refreshToken = $tokenData->refresh_token ?? $tokenData->data->refresh_token ?? null;
+            $refreshExpiresIn = $tokenData->refresh_expires_in ?? $tokenData->data->refresh_expires_in ?? null;
+
+            if (!$openId || !$accessToken) {
+                \Log::error('TikTok OAuth missing required fields', [
+                    'open_id' => $openId,
+                    'access_token' => $accessToken ? 'present' : 'missing'
+                ]);
+                return back()->with([
+                    'type'    => 'error',
+                    'message' => trans('TikTok API response missing required fields'),
+                ]);
+            }
 
             $platformId = Cache::get($this->cacheKey());
 
@@ -84,18 +108,18 @@ class TiktokController extends Controller
                 if ($item) {
                     $item->update([
                         'credentials' => [
-                            'platform_id'            => $tokenData?->open_id,
-                            'access_token'           => $tokenData?->access_token ?? '',
-                            'access_token_expire_at' => now()->addSeconds($tokenData?->expires_in ?? 0),
+                            'platform_id'            => $openId,
+                            'access_token'           => $accessToken,
+                            'access_token_expire_at' => now()->addSeconds($expiresIn),
 
-                            'refresh_token'           => $tokenData?->refresh_token ?? '',
-                            'refresh_token_expire_at' => now()->addSeconds($tokenData?->refresh_expires_in ?? 0),
+                            'refresh_token'           => $refreshToken ?? '',
+                            'refresh_token_expire_at' => $refreshExpiresIn ? now()->addSeconds($refreshExpiresIn) : null,
                         ],
                         'connected_at' => now(),
-                        'expires_at'   => now()->addSeconds($tokenData?->expires_in ?? 0),
+                        'expires_at'   => now()->addSeconds($expiresIn),
                     ]);
 
-                    $this->api->setToken($tokenData?->access_token);
+                    $this->api->setToken($accessToken);
 
                     try {
                         $this->setProfileInfo($item);
@@ -111,18 +135,18 @@ class TiktokController extends Controller
                     'user_id'     => Auth::id(),
                     'platform'    => PlatformEnum::tiktok->value,
                     'credentials' => [
-                        'platform_id'            => $tokenData?->open_id,
-                        'access_token'           => $tokenData?->access_token ?? '',
-                        'access_token_expire_at' => now()->addSeconds($tokenData?->expires_in ?? 0),
+                        'platform_id'            => $openId,
+                        'access_token'           => $accessToken,
+                        'access_token_expire_at' => now()->addSeconds($expiresIn),
 
-                        'refresh_token'           => $tokenData?->refresh_token ?? '',
-                        'refresh_token_expire_at' => now()->addSeconds($tokenData?->refresh_expires_in ?? 0),
+                        'refresh_token'           => $refreshToken ?? '',
+                        'refresh_token_expire_at' => $refreshExpiresIn ? now()->addSeconds($refreshExpiresIn) : null,
                     ],
                     'connected_at' => now(),
-                    'expires_at'   => now()->addSeconds($tokenData?->expires_in ?? 0),
+                    'expires_at'   => now()->addSeconds($expiresIn),
                 ]);
 
-                $this->api->setToken($tokenData?->access_token);
+                $this->api->setToken($accessToken);
 
                 try {
                     $this->setProfileInfo($item);
