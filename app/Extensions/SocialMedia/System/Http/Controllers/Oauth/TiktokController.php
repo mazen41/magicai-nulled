@@ -48,40 +48,68 @@ class TiktokController extends Controller
 
     public function callback(Request $request)
     {
-        $code = $request->get('code');
+        try {
+            $code = $request->get('code');
 
-        if (! $code) {
-            return back()->with([
-                'type'    => 'error',
-                'message' => trans('Something went wrong, please try again.'),
-            ]);
-        }
+            if (! $code) {
+                return back()->with([
+                    'type'    => 'error',
+                    'message' => trans('Something went wrong, please try again.'),
+                ]);
+            }
 
-        $response = $this->api->getAccessToken($code)
-            ->throw();
+            $response = $this->api->getAccessToken($code)
+                ->throw();
 
-        // Check for actual API errors, not just presence of error field
-        if ($response->json('error.code') && $response->json('error.code') !== 'ok') {
-            return back()->with([
-                'type'    => 'error',
-                'message' => trans('Failed to connect TikTok account: ' . $response->json('error.message', 'Unknown error')),
-            ]);
-        }
+            // Check for actual API errors, not just presence of error field
+            if ($response->json('error.code') && $response->json('error.code') !== 'ok') {
+                return back()->with([
+                    'type'    => 'error',
+                    'message' => trans('Failed to connect TikTok account: ' . $response->json('error.message', 'Unknown error')),
+                ]);
+            }
 
-        $tokenData = $response->object();
+            $tokenData = $response->object();
 
-        $platformId = Cache::get($this->cacheKey());
+            $platformId = Cache::get($this->cacheKey());
 
-        if ($platformId && is_numeric($platformId)) {
+            if ($platformId && is_numeric($platformId)) {
 
-            $item = SocialMediaPlatform::query()
-                ->where('user_id', Auth::id())
-                ->where('platform', PlatformEnum::tiktok->value)
-                ->where('id', $platformId)
-                ->first();
+                $item = SocialMediaPlatform::query()
+                    ->where('user_id', Auth::id())
+                    ->where('platform', PlatformEnum::tiktok->value)
+                    ->where('id', $platformId)
+                    ->first();
 
-            if ($item) {
-                $item->update([
+                if ($item) {
+                    $item->update([
+                        'credentials' => [
+                            'platform_id'            => $tokenData?->open_id,
+                            'access_token'           => $tokenData?->access_token ?? '',
+                            'access_token_expire_at' => now()->addSeconds($tokenData?->expires_in ?? 0),
+
+                            'refresh_token'           => $tokenData?->refresh_token ?? '',
+                            'refresh_token_expire_at' => now()->addSeconds($tokenData?->refresh_expires_in ?? 0),
+                        ],
+                        'connected_at' => now(),
+                        'expires_at'   => now()->addSeconds($tokenData?->expires_in ?? 0),
+                    ]);
+
+                    $this->api->setToken($tokenData?->access_token);
+
+                    try {
+                        $this->setProfileInfo($item);
+                    } catch (\Exception $e) {
+                        \Log::error('TikTok profile info fetch failed: ' . $e->getMessage());
+                        // Continue even if profile info fails
+                    }
+                }
+
+                Cache::forget($this->cacheKey());
+            } else {
+                $item = SocialMediaPlatform::query()->create([
+                    'user_id'     => Auth::id(),
+                    'platform'    => PlatformEnum::tiktok->value,
                     'credentials' => [
                         'platform_id'            => $tokenData?->open_id,
                         'access_token'           => $tokenData?->access_token ?? '',
@@ -96,32 +124,22 @@ class TiktokController extends Controller
 
                 $this->api->setToken($tokenData?->access_token);
 
-                $this->setProfileInfo($item);
+                try {
+                    $this->setProfileInfo($item);
+                } catch (\Exception $e) {
+                    \Log::error('TikTok profile info fetch failed: ' . $e->getMessage());
+                    // Continue even if profile info fails
+                }
             }
 
-            Cache::forget($this->cacheKey());
-        } else {
-            $item = SocialMediaPlatform::query()->create([
-                'user_id'     => Auth::id(),
-                'platform'    => PlatformEnum::tiktok->value,
-                'credentials' => [
-                    'platform_id'            => $tokenData?->open_id,
-                    'access_token'           => $tokenData?->access_token ?? '',
-                    'access_token_expire_at' => now()->addSeconds($tokenData?->expires_in ?? 0),
-
-                    'refresh_token'           => $tokenData?->refresh_token ?? '',
-                    'refresh_token_expire_at' => now()->addSeconds($tokenData?->refresh_expires_in ?? 0),
-                ],
-                'connected_at' => now(),
-                'expires_at'   => now()->addSeconds($tokenData?->expires_in ?? 0),
+            return $this->redirectToPlatforms('success', 'Tiktok account connected successfully.');
+        } catch (\Exception $e) {
+            \Log::error('TikTok OAuth callback error: ' . $e->getMessage());
+            return back()->with([
+                'type'    => 'error',
+                'message' => trans('Failed to connect TikTok account: ' . $e->getMessage()),
             ]);
-
-            $this->api->setToken($tokenData?->access_token);
-
-            $this->setProfileInfo($item);
         }
-
-        return $this->redirectToPlatforms('success', 'Tiktok account connected successfully.');
     }
 
     protected function setProfileInfo(SocialMediaPlatform|Model|Builder $item): void
