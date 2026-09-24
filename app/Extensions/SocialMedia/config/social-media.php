@@ -141,10 +141,6 @@ return [
             'user.info.profile',
             'user.info.stats',
             'video.list',
-            'video.publish',
-            'video.upload',
-            'comment.list',
-            'comment.create',
         ],
 
         'requirements' => [
