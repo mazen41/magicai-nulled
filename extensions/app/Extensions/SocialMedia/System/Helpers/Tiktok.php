@@ -13,10 +13,13 @@ class Tiktok
     {
         $this->config = $config ?? config('social-media.tiktok');
 
+        // Use direct model access to avoid caching issues with new columns
+        $setting = \App\Models\Setting::first();
+        
         $this->config = array_merge($this->config, [
-            'app_id'       => setting('TIKTOK_APP_ID'),
-            'app_key'      => setting('TIKTOK_APP_KEY'),
-            'app_secret'   => setting('TIKTOK_APP_SECRET'),
+            'app_id'       => $setting->tiktok_app_id ?? null,
+            'app_key'      => $setting->tiktok_app_key ?? null,
+            'app_secret'   => $setting->tiktok_app_secret ?? null,
         ]);
 
         $this->config['redirect_uri'] = secure_url($this->config['redirect_uri']);
