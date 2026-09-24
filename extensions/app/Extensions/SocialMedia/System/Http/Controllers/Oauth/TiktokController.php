@@ -60,9 +60,12 @@ class TiktokController extends Controller
         $response = $this->api->getAccessToken($code)
             ->throw();
 
-        if ($response->json('error')) {
-            echo $response->status();
-            exit();
+        // Check for actual API errors, not just presence of error field
+        if ($response->json('error.code') && $response->json('error.code') !== 'ok') {
+            return back()->with([
+                'type'    => 'error',
+                'message' => trans('Failed to connect TikTok account: ' . $response->json('error.message', 'Unknown error')),
+            ]);
         }
 
         $tokenData = $response->object();
