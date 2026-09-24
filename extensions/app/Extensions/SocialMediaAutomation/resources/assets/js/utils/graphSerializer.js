@@ -4,14 +4,8 @@ import { DEFAULT_POSITIONS, NODE_TYPES } from './constants';
  * Convert flat automation data (from server) into React Flow nodes and edges.
  */
 export function payloadToGraph(automation) {
-    if (automation?.workflow_graph?.nodes?.length) {
-        return {
-            nodes: automation.workflow_graph.nodes,
-            edges: automation.workflow_graph.edges || [],
-        };
-    }
-
-    // Generate default linear layout from flat data
+    // Always reconstruct from flat data to ensure synchronization
+    // This prevents stale workflow_graph from overwriting user changes
     const nodes = [];
     const edges = [];
     const hasDelay = (automation?.delay_seconds ?? 0) > 0;
@@ -83,6 +77,15 @@ export function graphToPayload(nodes, edges, storeState) {
     const triggerData = triggerNode?.data ?? {};
     const actionData = actionNode?.data ?? {};
 
+    // Only include replies if public replies are enabled
+    const enablePublicReplies = triggerData.enablePublicReplies ?? false;
+    const replyVariations = enablePublicReplies ? (triggerData.replyVariations ?? []) : [];
+
+    // Only include actions if they exist and have content
+    const actions = (actionData.actions?.length > 0)
+        ? actionData.actions.filter(a => a.content && (a.content.text || a.content.label || a.content.url || a.content.path || a.content.items?.length || a.content.seconds))
+        : [];
+
     return {
         name: storeState.automationName,
         social_media_platform_id: storeState.selectedAccountId,
@@ -92,12 +95,10 @@ export function graphToPayload(nodes, edges, storeState) {
         keyword_mode: triggerData.keywordMode ?? 'any',
         include_keywords: triggerData.includeKeywords ?? [],
         exclude_keywords: triggerData.excludeKeywords ?? [],
-        enable_public_replies: triggerData.enablePublicReplies ?? false,
+        enable_public_replies: enablePublicReplies,
         delay_seconds: delayNode?.data?.seconds ?? 0,
-        actions: (actionData.actions?.length > 0)
-            ? actionData.actions
-            : [{ type: 'text', content: { text: '' } }],
-        replies: (triggerData.replyVariations ?? []).map(v => ({ content: v })),
+        actions: actions,
+        replies: replyVariations.map(v => ({ content: v })),
         workflow_graph: { nodes, edges },
     };
 }

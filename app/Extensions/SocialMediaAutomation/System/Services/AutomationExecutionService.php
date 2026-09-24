@@ -330,6 +330,8 @@ class AutomationExecutionService
                 'status'        => 'failed',
                 'error_message' => $e->getMessage(),
             ]);
+
+            throw $e;
         }
     }
 
@@ -624,6 +626,7 @@ class AutomationExecutionService
     private function sendFacebookDm(SocialMediaPlatform $platform, string $commentId, array $actions): void
     {
         $accessToken = $platform->credentials['access_token'] ?? null;
+        $pageId = $platform->credentials['platform_id'] ?? null;
 
         Log::info('[FB AUTOMATION DEBUG] RECIPIENT RESOLUTION', [
             'source_commenter_id' => $commentId,
@@ -633,7 +636,7 @@ class AutomationExecutionService
         ]);
 
         Log::info('[FB AUTOMATION DEBUG] SEND DM START', [
-            'page_id' => $platform->credentials['platform_id'] ?? null,
+            'page_id' => $pageId,
             'recipient_id_masked' => $commentId ? substr($commentId, 0, 8) . '...' : 'MISSING',
             'message_length' => strlen($actions[0]['content']['text'] ?? ''),
             'automation_id' => $platform->id,
@@ -647,6 +650,12 @@ class AutomationExecutionService
 
         if (! $commentId) {
             Log::warning('[FB AUTOMATION DEBUG] Facebook DM skipped: missing comment_id', ['platform_id' => $platform->id]);
+
+            return;
+        }
+
+        if (! $pageId) {
+            Log::warning('[FB AUTOMATION DEBUG] Facebook DM skipped: missing page_id', ['platform_id' => $platform->id]);
 
             return;
         }
@@ -672,14 +681,14 @@ class AutomationExecutionService
             }
 
             Log::info('[FB AUTOMATION DEBUG] FACEBOOK GRAPH API REQUEST', [
-                'endpoint' => "{$baseUrl}/me/messages",
+                'endpoint' => "{$baseUrl}/{$pageId}/messages",
                 'method' => 'POST',
                 'recipient_comment_id' => $commentId,
                 'message_type' => $action['type'] ?? null,
                 'api_version' => $apiVersion,
             ]);
 
-            $response = $this->graphApiPost("{$baseUrl}/me/messages", $accessToken, [
+            $response = $this->graphApiPost("{$baseUrl}/{$pageId}/messages", $accessToken, [
                 'recipient' => ['comment_id' => $commentId],
                 'message'   => $message,
             ]);
