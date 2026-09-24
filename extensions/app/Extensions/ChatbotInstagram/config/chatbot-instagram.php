@@ -13,11 +13,8 @@ return [
         'api_version'  => 'v18.0',
         'scopes'       => [
             'instagram_basic',
-            'instagram_content_publish',
             'pages_read_engagement',
             'pages_show_list',
-            'business_management',
-            'instagram_manage_insights',
             'instagram_manage_messages',
         ],
     ],

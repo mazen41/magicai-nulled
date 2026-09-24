@@ -1,0 +1,57 @@
+[90m= [39m[34;4mApp\Extensions\SocialMediaAutomation\System\Models\Automation[39;24m {#10833
+    [34mid[39m: [35m2[39m,
+    [34muser_id[39m: [35m1[39m,
+    [34msocial_media_platform_id[39m: [35m1[39m,
+    [34mconnected_account_id[39m: [36mnull[39m,
+    [34mname[39m: [32m"[39m[32mFacebook Automation Sep 23[39m[32m"[39m,
+    [34mstatus[39m: [32m"[39m[32mlive[39m[32m"[39m,
+    [34mtrigger_target[39m: [32m"[39m[32mall_posts[39m[32m"[39m,
+    [34mtrigger_post_id[39m: [36mnull[39m,
+    [34mtrigger_post_data[39m: [36mnull[39m,
+    [34mkeyword_mode[39m: [32m"[39m[32many[39m[32m"[39m,
+    [34minclude_keywords[39m: [32m"[39m[32m[][39m[32m"[39m,
+    [34mexclude_keywords[39m: [32m"[39m[32m[][39m[32m"[39m,
+    [34menable_public_replies[39m: [35m1[39m,
+    [34mdelay_seconds[39m: [35m0[39m,
+    [34mworkflow_graph[39m: [32m"[39m[32m{[39m\"[32medges[39m\"[32m: [{[39m\"[32mid[39m\"[32m: [39m\"[32me-trigger-1-action-1[39m\"[32m, [39m\"[32mtype[39m\"[32m: [39m\"[32mcustom[39m\"[32m, [39m\"[32msource[39m\"[32m: [39m\"[32mtrigger-1[39m\"[32m, [39m\"[32mtarget[39m\"[32m: [39m\"[32maction-1[39m\"[32m}], [39m\"[32mnodes[39m\"[32m: [{[39m\"[32mid[39m\"[32m: [39m\"[32mtrigger-1[39m\"[32m, [39m\"[32mdata[39m\"[32m: {[39m\"[32mconfigured[39m\"[32m: true, [39m\"[32mkeywordMode[39m\"[32m: [39m\"[32many[39m\"[32m, [39m\"[32mtriggerPostId[39m\"[32m: null, [39m\"[32mtriggerTarget[39m\"[32m: [39m\"[32mall_posts[39m\"[32m, [39m\"[32mexcludeKeywords[39m\"[32m: [], [39m\"[32mincludeKeywords[39m\"[32m: [], [39m\"[32mreplyVariations[39m\"[32m: [[39m\"[32mHi[39m\"[32m, [39m\"[32mHey[39m\"[32m, [39m\"[32mHey[39m\"[32m], [39m\"[32mtriggerPostData[39m\"[32m: null, [39m\"[32menablePublicReplies[39m\"[32m: true}, [39m\"[32mtype[39m\"[32m: [39m\"[32mtrigger[39m\"[32m, [39m\"[32mmeasured[39m\"[32m: {[39m\"[32mwidth[39m\"[32m: 256, [39m\"[32mheight[39m\"[32m: 180}, [39m\"[32mposition[39m\"[32m: {[39m\"[32mx[39m\"[32m: 100, [39m\"[32my[39m\"[32m: 200}, [39m\"[32mselected[39m\"[32m: false}, {[39m\"[32mid[39m\"[32m: [39m\"[32maction-1[39m\"[32m, [39m\"[32mdata[39m\"[32m: {[39m\"[32mactions[39m\"[32m: []}, [39m\"[32mtype[39m\"[32m: [39m\"[32maction[39m\"[32m, [39m\"[32mmeasured[39m\"[32m: {[39m\"[32mwidth[39m\"[32m: 256, [39m\"[32mheight[39m\"[32m: 182}, [39m\"[32mposition[39m\"[32m: {[39m\"[32mx[39m\"[32m: 550, [39m\"[32my[39m\"[32m: 200}, [39m\"[32mselected[39m\"[32m: false}]}[39m[32m"[39m,
+    [34mcreated_at[39m: [32m"[39m[32m2026-09-23 04:17:27[39m[32m"[39m,
+    [34mupdated_at[39m: [32m"[39m[32m2026-09-23 04:24:39[39m[32m"[39m,
+    [34mactions[39m: [34;4mIlluminate\Database\Eloquent\Collection[39;24m {#10807
+      [34mall[39m: [
+        [34;4mApp\Extensions\SocialMediaAutomation\System\Models\AutomationAction[39;24m {#10851
+          [34mid[39m: [35m10[39m,
+          [34mautomation_id[39m: [35m2[39m,
+          [34mtype[39m: [32m"[39m[32mtext[39m[32m"[39m,
+          [34mcontent[39m: [32m"[39m[32m{[39m\"[32mtext[39m\"[32m: null}[39m[32m"[39m,
+          [34morder[39m: [35m0[39m,
+          [34mcreated_at[39m: [32m"[39m[32m2026-09-23 04:24:39[39m[32m"[39m,
+          [34mupdated_at[39m: [32m"[39m[32m2026-09-23 04:24:39[39m[32m"[39m,
+        },
+      ],
+    },
+    [34mreplies[39m: [34;4mIlluminate\Database\Eloquent\Collection[39;24m {#10854
+      [34mall[39m: [
+        [34;4mApp\Extensions\SocialMediaAutomation\System\Models\AutomationReply[39;24m {#10858
+          [34mid[39m: [35m5[39m,
+          [34mautomation_id[39m: [35m2[39m,
+          [34mcontent[39m: [32m"[39m[32mHi[39m[32m"[39m,
+          [34mcreated_at[39m: [32m"[39m[32m2026-09-23 04:24:39[39m[32m"[39m,
+          [34mupdated_at[39m: [32m"[39m[32m2026-09-23 04:24:39[39m[32m"[39m,
+        },
+        [34;4mApp\Extensions\SocialMediaAutomation\System\Models\AutomationReply[39;24m {#10855
+          [34mid[39m: [35m6[39m,
+          [34mautomation_id[39m: [35m2[39m,
+          [34mcontent[39m: [32m"[39m[32mHey[39m[32m"[39m,
+          [34mcreated_at[39m: [32m"[39m[32m2026-09-23 04:24:39[39m[32m"[39m,
+          [34mupdated_at[39m: [32m"[39m[32m2026-09-23 04:24:39[39m[32m"[39m,
+        },
+        [34;4mApp\Extensions\SocialMediaAutomation\System\Models\AutomationReply[39;24m {#10857
+          [34mid[39m: [35m7[39m,
+          [34mautomation_id[39m: [35m2[39m,
+          [34mcontent[39m: [32m"[39m[32mHey[39m[32m"[39m,
+          [34mcreated_at[39m: [32m"[39m[32m2026-09-23 04:24:39[39m[32m"[39m,
+          [34mupdated_at[39m: [32m"[39m[32m2026-09-23 04:24:39[39m[32m"[39m,
+        },
+      ],
+    },
+  }

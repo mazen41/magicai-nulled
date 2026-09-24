@@ -50,9 +50,9 @@ class InstagramController extends Controller
             $token = $instagram->getAccessToken($code)->throw()->json('access_token');
             $instagram->setToken($token);
 
-            $page = $instagram->getAccountInfo(['connected_instagram_account,name,access_token'])
-                ->throw()
-                ->json('data.0');
+            $accountInfoResponse = $instagram->getAccountInfo(['connected_instagram_account,name,access_token']);
+            Log::error('IG_DEBUG: ' . $accountInfoResponse->body());
+            $page = $accountInfoResponse->json('data.0');
 
             if (! isset($page['connected_instagram_account']['id'])) {
                 throw new Exception('Instagram hesabı bulunamadı.');
